@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 220" role="img" aria-label="신입 상담관 캐릭터">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="0" flood-color="#1a1a1a" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)" stroke="#161616" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M57 170c18-20 119-20 144 0 11 9 6 24-9 24H67c-16 0-21-14-10-24z" fill="#f2f2ed"/>
+    <path d="M86 112h88c15 0 27 12 27 27v36H60v-36c0-15 12-27 26-27z" fill="#7b8f4b"/>
+    <path d="M106 111h48v44h-48z" fill="#f3bd86"/>
+    <path d="M78 70c0-31 22-53 53-53s52 22 52 53-20 58-52 58-53-26-53-58z" fill="#f4c28d"/>
+    <path d="M82 67c5-32 28-48 55-48 26 0 42 13 48 36-19-4-34-12-46-27-7 19-27 34-57 39z" fill="#3a2d24"/>
+    <path d="M72 82c-10-4-18 3-15 16 3 12 16 16 24 7zM188 82c10-4 18 3 15 16-3 12-16 16-24 7z" fill="#f4c28d"/>
+    <path d="M111 82h1M150 82h1" fill="none"/>
+    <path d="M116 103c9 7 21 7 30 0" fill="none"/>
+    <path d="M69 143h-32c-9 0-15 7-15 15v7h47zM192 143h31c9 0 15 7 15 15v7h-46z" fill="#f4c28d"/>
+    <path d="M103 139l27 26 27-26" fill="none"/>
+    <path d="M178 41l20-20 13 13-20 20z" fill="#f6d763"/>
+    <path d="M196 19l8-8 13 13-8 8z" fill="#ee6f5e"/>
+  </g>
+</svg>

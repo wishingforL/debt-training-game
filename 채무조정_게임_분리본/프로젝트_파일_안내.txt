@@ -1,0 +1,31 @@
+이 폴더가 현재 작업 중인 React + Vite + TypeScript 게임 프로젝트 분리본입니다.
+
+실행할 때 필요한 주요 파일
+- package.json: 실행/빌드 명령과 라이브러리 정보
+- package-lock.json: 설치 버전 고정 파일
+- index.html: Vite 앱 진입 HTML
+- tsconfig.json: TypeScript 설정
+- vercel.json: Vercel 배포 설정
+- src/App.tsx: 게임 화면과 흐름
+- src/styles.css: 모바일 게임 디자인
+- src/calculation.ts: 생계비, 가용소득, 상환기간 계산
+- src/data/levels.ts: 레벨별 시나리오와 정답 데이터
+- src/types.ts: TypeScript 타입
+- src/main.tsx: React 앱 시작점
+- assets/rookie-clerk.svg: 시작 화면 이미지
+- tools/serve-dist.mjs: 빌드 결과 확인용 로컬 서버
+
+이 분리본에 일부러 넣지 않은 것
+- node_modules: npm install을 하면 다시 생깁니다.
+- dist: npm run build를 하면 다시 생깁니다.
+- app.js, styles.css: 예전 단일 파일 버전이라 현재 React 프로젝트에는 필요 없습니다.
+- assets/reference-flow.mp4, assets/case-room.svg, assets/hwpx-preview.png: 현재 앱에서 직접 쓰지 않는 참고/이전 작업 파일입니다.
+
+실행 방법
+1. 터미널에서 이 폴더로 이동
+2. npm install
+3. npm run dev
+
+배포 전 확인
+1. npm run build
+2. Vercel에는 이 폴더 전체를 프로젝트로 올리면 됩니다.
