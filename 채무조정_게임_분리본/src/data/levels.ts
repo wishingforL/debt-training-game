@@ -7,7 +7,7 @@ const yesNoOptions = [
   { label: "없음", value: false },
 ];
 
-export const LEVELS: LevelData[] = [
+const LEVEL_CASES: LevelData[] = [
   {
     id: "level-1",
     level: 1,
@@ -82,8 +82,8 @@ export const LEVELS: LevelData[] = [
     },
   },
   {
-    id: "level-3",
-    level: 3,
+    id: "level-4",
+    level: 4,
     title: "담보채무 등장",
     badge: "신용채무 · 담보채무 구분",
     goal: "신용채무와 담보채무를 분리해 채무현황에 입력합니다.",
@@ -127,8 +127,8 @@ export const LEVELS: LevelData[] = [
     },
   },
   {
-    id: "level-4",
-    level: 4,
+    id: "level-3",
+    level: 3,
     title: "재산확인",
     badge: "차량 · 예금 추가",
     goal: "재산 정보를 확인하고 채무현황과 함께 검토합니다.",
@@ -212,3 +212,5 @@ export const LEVELS: LevelData[] = [
     },
   },
 ];
+
+export const LEVELS: LevelData[] = [...LEVEL_CASES].sort((a, b) => a.level - b.level);

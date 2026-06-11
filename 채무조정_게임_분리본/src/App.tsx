@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import { calculateLevel, formatMoney, paymentForMonths, type CalculationResult } from "./calculation";
 import { LEVELS, SUPPORT_OPTIONS } from "./data/levels";
 import type { FieldValue, IntakeField, LevelData, LevelResult, StoredStats } from "./types";
-import rookieClerk from "../assets/rookie-clerk.svg";
+import startHero from "../assets/start-hero.jpg";
 
 const STORAGE_KEY = "rookie-debt-adjustment-game-v1";
 const emptyStats: StoredStats = {
@@ -27,7 +27,7 @@ const emptyStats: StoredStats = {
   lastScore: 0,
 };
 
-type Screen = "start" | "game" | "result";
+type Screen = "start" | "levelSelect" | "game" | "result";
 type Phase = "scenario" | "intake" | "calculation" | "mission";
 
 type MissionDraft = {
@@ -426,18 +426,20 @@ function App() {
     <div className="app">
       <main className={shellClass}>
         {screen === "start" && (
-          <section className="start-screen">
-            <div className="title-block">
-              <span className="eyebrow">ROOKIE ADJUSTER</span>
-              <h1 className="brand-title">
-                <span>MYSTERY</span>
-                <span>AT THE DESK</span>
-              </h1>
-              <div className="stage-preview" aria-hidden="true">
-                <span className="moon" />
-                <img src={rookieClerk} alt="" />
-              </div>
-              <p className="hero-copy">신입 상담관이 되어 접수 미션을 클리어하세요.</p>
+          <section className="start-screen intro-screen">
+            <button className="intro-poster" onClick={() => setScreen("levelSelect")} type="button">
+              <img src={startHero} alt="Mystery at the desk 시작 화면" />
+            </button>
+          </section>
+        )}
+
+        {screen === "levelSelect" && (
+          <section className="start-screen level-select-screen">
+            <div className="level-select-nav">
+              <button className="return-home-action" onClick={() => setScreen("start")} type="button">
+                <ChevronLeft size={18} aria-hidden="true" />
+                첫 화면
+              </button>
             </div>
 
             <div className="stat-strip" aria-label="저장된 점수">
@@ -680,10 +682,6 @@ function App() {
                   <div>
                     <dt>가구수</dt>
                     <dd>{calculation.householdMembers}인 가구</dd>
-                  </div>
-                  <div>
-                    <dt>최저생계비</dt>
-                    <dd>기준중위소득 40% = {formatMoney(calculation.minimumLivingExpense)}만원</dd>
                   </div>
                   <div>
                     <dt>최대 생계비</dt>

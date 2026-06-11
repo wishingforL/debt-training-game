@@ -61,6 +61,10 @@ p {
   background: var(--bg);
 }
 
+.app:has(.screen-start) {
+  background: #fdd64a;
+}
+
 .phone-shell {
   width: min(100%, 430px);
   min-height: 100dvh;
@@ -112,6 +116,60 @@ p {
 .start-screen,
 .result-screen {
   justify-content: center;
+}
+
+.intro-screen {
+  --bg: #fdd64a;
+  padding: 0;
+  justify-content: stretch;
+  gap: 0;
+  background: #fdd64a;
+}
+
+.intro-poster {
+  width: calc(100% + 8px);
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin: 0 -4px;
+  padding: 0 0 max(24px, env(safe-area-inset-bottom));
+  overflow: hidden;
+  background: #fdd64a;
+  border: 0;
+  border-radius: 0;
+}
+
+.intro-poster img {
+  width: 100%;
+  height: auto;
+  display: block;
+  clip-path: inset(0.38% 0 0.38% 0);
+  object-fit: contain;
+  object-position: center top;
+}
+
+.level-select-screen {
+  justify-content: flex-start;
+}
+
+.level-select-nav {
+  display: flex;
+  align-items: center;
+}
+
+.return-home-action {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border: 0;
+  border-radius: 999px;
+  font-weight: 900;
 }
 
 .title-block {

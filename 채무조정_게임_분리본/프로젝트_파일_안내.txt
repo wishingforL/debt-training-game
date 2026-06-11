@@ -12,7 +12,8 @@
 - src/data/levels.ts: 레벨별 시나리오와 정답 데이터
 - src/types.ts: TypeScript 타입
 - src/main.tsx: React 앱 시작점
-- assets/rookie-clerk.svg: 시작 화면 이미지
+- assets/start-hero.jpg: 현재 시작 화면 포스터 이미지
+- assets/rookie-clerk.svg: 이전 시작 화면용 이미지, 현재 화면에서는 직접 사용하지 않음
 - tools/serve-dist.mjs: 빌드 결과 확인용 로컬 서버
 
 이 분리본에 일부러 넣지 않은 것
