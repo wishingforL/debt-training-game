@@ -29,7 +29,7 @@ const LEVEL_CASES: LevelData[] = [
     ],
     result: {
       disposableIncome: 25,
-      formula: "250 - 조정생계비 225 = 25",
+      formula: "250 - 조정생활비 225 = 25",
     },
     mission: {
       supportType: "개인워크아웃",
@@ -73,7 +73,7 @@ const LEVEL_CASES: LevelData[] = [
     ],
     result: {
       disposableIncome: 40,
-      formula: "280 - 생계비 240 = 40",
+      formula: "280 - 생활비 240 = 40",
     },
     mission: {
       supportType: "사전채무조정",
@@ -118,7 +118,7 @@ const LEVEL_CASES: LevelData[] = [
     ],
     result: {
       disposableIncome: 41.7,
-      formula: "320 - 조정생계비 278.3 = 41.7",
+      formula: "320 - 조정생활비 278.3 = 41.7",
     },
     mission: {
       supportType: "개인워크아웃",
@@ -153,7 +153,7 @@ const LEVEL_CASES: LevelData[] = [
     ],
     result: {
       disposableIncome: 52.1,
-      formula: "350 - 조정생계비 297.9 = 52.1",
+      formula: "350 - 조정생활비 297.9 = 52.1",
     },
     mission: {
       supportType: "개인워크아웃",
@@ -203,7 +203,7 @@ const LEVEL_CASES: LevelData[] = [
     ],
     result: {
       disposableIncome: 50,
-      formula: "330 - 생계비 280 = 50",
+      formula: "330 - 생활비 280 = 50",
     },
     mission: {
       supportType: "사전채무조정",

@@ -13,13 +13,82 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { calculateLevel, formatMoney, paymentForMonths, type CalculationResult } from "./calculation";
+import { useMemo, useState, type CSSProperties } from "react";
+import {
+  calculateLevel,
+  formatMoney,
+  paymentForMonths,
+  repaymentMonthsForPayment,
+  type CalculationResult,
+} from "./calculation";
 import { LEVELS, SUPPORT_OPTIONS } from "./data/levels";
 import type { FieldValue, IntakeField, LevelData, LevelResult, StoredStats } from "./types";
 import startHero from "../assets/start-hero.jpg";
 
 const STORAGE_KEY = "rookie-debt-adjustment-game-v1";
+const PAYMENT_SNAP_TOLERANCE = 0.45;
+const TUTORIAL_PAGES = [
+  {
+    badge: "참여 안내",
+    title: "게임은 이렇게 진행됩니다.",
+    lines: [
+      "표지를 누르면 튜토리얼을 확인한 뒤 레벨을 선택합니다.",
+      "각 레벨은 시나리오 읽기, 접수 입력, 최종미션 순서로 진행됩니다.",
+      "설치 없이 브라우저에서 플레이하며, 점수와 잠금해제 기록은 이 기기에 저장됩니다.",
+    ],
+    chips: ["표지", "튜토리얼", "레벨 선택", "접수 시작"],
+  },
+  {
+    badge: "시나리오",
+    title: "고객의 말에서 접수 단서를 찾습니다.",
+    lines: [
+      "고객이 말한 월소득, 부양가족, 연체일수, 채무 금액을 먼저 확인합니다.",
+      "레벨이 올라가면 주거, 보증금, 월세, 재산, 담보채무, 급여압류가 추가됩니다.",
+      "기억이 안 나면 언제든 시나리오 다시보기를 눌러 원문을 다시 확인하세요.",
+    ],
+    chips: ["소득", "가족", "연체", "채무", "주거", "재산"],
+  },
+  {
+    badge: "접수 입력",
+    title: "전산 항목을 하나씩 채웁니다.",
+    lines: [
+      "상단 탭은 현재 입력해야 할 전산 화면입니다.",
+      "숫자는 만원 단위로 입력합니다. 예를 들어 2,400만원은 2400으로 입력합니다.",
+      "틀리면 힌트를 확인할 수 있고, 두 번 이상 틀리면 정답 보기와 값 채우기가 열립니다.",
+    ],
+    chips: ["입력", "확인", "힌트", "정답 보기"],
+  },
+  {
+    badge: "지원구분",
+    title: "연체일수로 지원구분을 판단합니다.",
+    lines: [
+      "30일 이하는 신속채무조정입니다. 원리금상환, 이자율 11%, 최대 120개월 기준입니다.",
+      "31~89일은 사전채무조정입니다. 원리금상환, 이자율 6%, 최대 120개월 기준입니다.",
+      "90일 이상은 개인워크아웃입니다. 원금상환, 최대 96개월 기준입니다.",
+    ],
+    chips: ["신속", "사전", "개인워크아웃"],
+  },
+  {
+    badge: "월납부액",
+    title: "생활비를 남기고 월납부액을 찾습니다.",
+    lines: [
+      "총 소득은 고정이고, 막대의 경계를 움직이면 생활비와 월납부액이 함께 바뀝니다.",
+      "생활비가 부족하면 생활비를 늘리고, 계산불가가 뜨면 월납부액을 늘려야 합니다.",
+      "정답 근처는 0.45만원 범위에서 자동으로 붙어 손가락으로 맞추기 쉽게 되어 있습니다.",
+    ],
+    chips: ["총 소득", "생활비", "월납부액", "계산불가"],
+  },
+  {
+    badge: "점수",
+    title: "정확할수록 점수가 높아집니다.",
+    lines: [
+      "레벨 기본점수는 900점에 레벨 보너스가 더해집니다.",
+      "오답은 1회마다 80점이 차감됩니다. 그래도 레벨당 최소 240점은 보장됩니다.",
+      "시나리오 다시보기와 힌트는 연습용 도구입니다. 필요한 만큼 확인하며 익히세요.",
+    ],
+    chips: ["기본점수", "오답 감점", "최소점수", "기록 저장"],
+  },
+];
 const emptyStats: StoredStats = {
   bestScore: 0,
   clearedLevel: 0,
@@ -27,7 +96,7 @@ const emptyStats: StoredStats = {
   lastScore: 0,
 };
 
-type Screen = "start" | "levelSelect" | "game" | "result";
+type Screen = "start" | "tutorial" | "levelSelect" | "game" | "result";
 type Phase = "scenario" | "intake" | "calculation" | "mission";
 
 type MissionDraft = {
@@ -105,20 +174,54 @@ function fieldHint(field: IntakeField) {
 
 function missionHint(calculation: CalculationResult) {
   return [
-    "지원구분은 연체일수 기준으로 판단합니다. 30일 이하는 신속채무조정, 31~89일은 사전채무조정, 90일 이상은 개인워크아웃입니다.",
-    `월 변제금은 조정된 가용소득 ${formatMoney(calculation.disposableIncome)}만원을 기준으로 입력합니다.`,
-    "상환기간은 신속채무조정 연 11% 원리금균등, 사전채무조정 연 6% 원리금균등, 개인워크아웃 원금 기준으로 계산합니다.",
-  ].join(" ");
+    "1. 지원구분: 연체일수 기준으로 판단합니다.",
+    "30일 이하 = 신속채무조정",
+    "31~89일 = 사전채무조정",
+    "90일 이상 = 개인워크아웃",
+    "",
+    "2. 월납부액: 반올림하여 산출",
+    "소득 - 생활비(생활비 변경해 최장 상환기간 구하기)",
+    "",
+    "3. 상환기간 계산 기준:",
+    "신속채무조정 = 원리금상환, 이자율 11%",
+    "사전채무조정 = 원리금상환, 이자율 6%",
+    "개인워크아웃 = 원금상환",
+  ].join("\n");
+}
+
+function supportOptionMeta(option: string) {
+  const labels: Record<string, { detail: string; title: string }> = {
+    신속채무조정: { detail: "원리금상환, 이자율 11%", title: "신속채무조정" },
+    사전채무조정: { detail: "원리금상환, 이자율 6%", title: "사전채무조정" },
+    개인워크아웃: { detail: "원금상환", title: "개인워크아웃" },
+  };
+
+  return labels[option] ?? { detail: "", title: option };
+}
+
+function supportTermsFor(option: string, fallback: CalculationResult) {
+  const terms: Record<string, { annualInterestRate: number; maxRepaymentMonths: number }> = {
+    신속채무조정: { annualInterestRate: 0.11, maxRepaymentMonths: 120 },
+    사전채무조정: { annualInterestRate: 0.06, maxRepaymentMonths: 120 },
+    개인워크아웃: { annualInterestRate: 0, maxRepaymentMonths: 96 },
+  };
+
+  return terms[option] ?? {
+    annualInterestRate: fallback.annualInterestRate,
+    maxRepaymentMonths: fallback.maxRepaymentMonths,
+  };
 }
 
 function App() {
   const [stats, setStats] = useState<StoredStats>(() => loadStats());
   const [screen, setScreen] = useState<Screen>("start");
+  const [tutorialIndex, setTutorialIndex] = useState(0);
   const [selectedLevel, setSelectedLevel] = useState(() => Math.min(stats.clearedLevel, LEVELS.length - 1));
   const [levelIndex, setLevelIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("scenario");
   const [activeFieldIndex, setActiveFieldIndex] = useState(0);
   const [draftValue, setDraftValue] = useState<FieldValue>("");
+  const [groupDraft, setGroupDraft] = useState<Record<string, FieldValue>>({});
   const [answers, setAnswers] = useState<Record<string, FieldValue>>({});
   const [solved, setSolved] = useState<Record<string, boolean>>({});
   const [feedback, setFeedback] = useState("");
@@ -140,6 +243,7 @@ function App() {
     annualRate: "",
     months: "",
   });
+  const [repaymentDraft, setRepaymentDraft] = useState<number | null>(null);
 
   const level = LEVELS[levelIndex];
   const calculation = useMemo(() => calculateLevel(level), [level]);
@@ -164,16 +268,88 @@ function App() {
     const totalPayment = monthlyPayment * months;
 
     return {
-      monthlyPayment: round1(monthlyPayment),
+      monthlyPayment: Math.round(monthlyPayment),
       totalPayment: round1(totalPayment),
       interestPayment: round1(Math.max(0, totalPayment - principal)),
     };
   }, [calculatorDraft]);
+  const repaymentModel = useMemo(() => {
+    const selectedSupportType = missionDraft.supportType || calculation.supportType;
+    const selectedTerms = supportTermsFor(selectedSupportType, calculation);
+    const monthlyInterestRate = selectedTerms.annualInterestRate / 12;
+    const maxPayment = Math.max(0, Math.round(calculation.income));
+    const defaultMonthlyPayment = Math.round(calculation.income / 2);
+    const monthlyPayment = Math.max(0, Math.min(maxPayment, repaymentDraft ?? defaultMonthlyPayment));
+    const livingExpense = Math.max(0, calculation.income - monthlyPayment);
+    const rawRepaymentMonths = repaymentMonthsForPayment(
+      calculation.targetDebt,
+      monthlyPayment,
+      monthlyInterestRate,
+    );
+    const roundedRequiredPayment = Math.round(
+      paymentForMonths(calculation.targetDebt, selectedTerms.maxRepaymentMonths, monthlyInterestRate),
+    );
+    const acceptsRoundedMaxPeriod =
+      rawRepaymentMonths !== null &&
+      rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
+      monthlyPayment === roundedRequiredPayment;
+    const exceedsMaxPeriod =
+      rawRepaymentMonths !== null &&
+      rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
+      !acceptsRoundedMaxPeriod;
+    const cannotCalculatePeriod = rawRepaymentMonths === null || exceedsMaxPeriod;
+    const repaymentPeriod = acceptsRoundedMaxPeriod
+      ? selectedTerms.maxRepaymentMonths
+      : rawRepaymentMonths !== null && rawRepaymentMonths <= selectedTerms.maxRepaymentMonths
+        ? rawRepaymentMonths
+        : null;
+    const periodLabel = repaymentPeriod
+      ? `${repaymentPeriod}개월`
+      : "계산불가";
+    const cappedByMaxPeriod = acceptsRoundedMaxPeriod;
+    const feedbackCannotCalculate = rawRepaymentMonths === null
+      ? "월납부액이 낮아 상환기간 계산이 어렵습니다. 월납부액을 늘려주세요."
+      : "최대 상환기간 안에 들어오지 않습니다. 월납부액을 늘려주세요.";
+    const paymentRatio = maxPayment > 0 ? (monthlyPayment / maxPayment) * 100 : 0;
+    const minimumLivingExpenseLimit = calculation.minimumLivingExpense * 0.7;
+    const feedbackState =
+      livingExpense <= minimumLivingExpenseLimit
+        ? "danger"
+        : livingExpense > calculation.maxLivingExpense || cannotCalculatePeriod || exceedsMaxPeriod
+          ? "notice"
+          : "ok";
+    const feedback =
+      livingExpense <= minimumLivingExpenseLimit
+        ? "생활비가 부족합니다. 최저 생활비 70% 이하입니다. 생활비를 늘려주세요."
+          : livingExpense > calculation.maxLivingExpense
+            ? "최대 생활비를 초과합니다. 월납부액을 늘려주세요."
+            : cannotCalculatePeriod
+              ? feedbackCannotCalculate
+              : `생활비 ${formatMoney(livingExpense)}만원을 확보했습니다. 남은 ${formatMoney(monthlyPayment)}만원을 월납부액으로 산정할 수 있습니다.`;
+
+    return {
+      cappedByMaxPeriod,
+      cannotCalculatePeriod,
+      exceedsMaxPeriod,
+      feedback,
+      feedbackState,
+      livingExpense,
+      maxPayment,
+      monthlyPayment,
+      paymentRatio,
+      periodLabel,
+      repaymentPeriod,
+      targetPayment: roundedRequiredPayment,
+    };
+  }, [calculation, missionDraft.supportType, repaymentDraft]);
   const activeField = level.fields[activeFieldIndex];
-  const solvedCount = level.fields.filter((field) => solved[field.key]).length;
-  const levelProgress = Math.round((solvedCount / level.fields.length) * 100);
+  const groupedScreenFields =
+    activeField?.screen === "채무현황" ? level.fields.filter((field) => field.screen === activeField.screen) : [];
+  const usesGroupedScreen = phase === "intake" && groupedScreenFields.length > 1;
   const unlockedLevel = Math.min(stats.clearedLevel + 1, LEVELS.length);
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
+  const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 : 4;
+  const phaseProgressWidth = ((level.level - 1 + phaseStep / 4) / LEVELS.length) * 100;
 
   const screenProgress = useMemo(() => {
     return level.systemScreens.map((screenName) => {
@@ -184,11 +360,27 @@ function App() {
     });
   }, [level, solved]);
 
+  const entryItems = useMemo(() => {
+    const groupedScreens = new Set<string>();
+    return level.fields.flatMap((field, index) => {
+      const screenFields = field.screen === "채무현황" ? level.fields.filter((item) => item.screen === field.screen) : [];
+
+      if (screenFields.length > 1) {
+        if (groupedScreens.has(field.screen)) return [];
+        groupedScreens.add(field.screen);
+        return [{ key: `screen-${field.screen}`, label: field.screen, fields: screenFields, index, isGroup: true }];
+      }
+
+      return [{ key: field.key, label: field.label, fields: [field], index, isGroup: false }];
+    });
+  }, [level]);
+
   function resetLevelState(nextLevelIndex: number, nextPhase: Phase = "scenario") {
     setLevelIndex(nextLevelIndex);
     setPhase(nextPhase);
     setActiveFieldIndex(0);
     setDraftValue("");
+    setGroupDraft({});
     setAnswers({});
     setSolved({});
     setFeedback("");
@@ -208,6 +400,7 @@ function App() {
       annualRate: "",
       months: "",
     });
+    setRepaymentDraft(null);
   }
 
   function startRun(startIndex = selectedLevel) {
@@ -225,8 +418,14 @@ function App() {
 
   function prepareField(index: number) {
     const field = level.fields[index];
+    const screenFields = field.screen === "채무현황" ? level.fields.filter((item) => item.screen === field.screen) : [];
     setActiveFieldIndex(index);
     setDraftValue(answers[field.key] ?? "");
+    setGroupDraft(
+      screenFields.length > 1
+        ? Object.fromEntries(screenFields.map((item) => [item.key, answers[item.key] ?? ""]))
+        : {},
+    );
     setFeedback("");
   }
 
@@ -237,17 +436,86 @@ function App() {
 
   function openRepaymentCalculator() {
     setCalculatorDraft({
-      principal: String(calculation.targetDebt),
-      annualRate: String(round1(calculation.annualInterestRate * 100)),
-      months: String(calculation.repaymentPeriod || calculation.maxRepaymentMonths),
+      principal: "0",
+      annualRate: "0",
+      months: "0",
     });
     setCalculatorOpen(true);
+  }
+
+  function setDraftForField(field: IntakeField, value: FieldValue) {
+    if (field.screen === "채무현황" && groupedScreenFields.some((item) => item.key === field.key)) {
+      setGroupDraft((current) => ({ ...current, [field.key]: value }));
+      return;
+    }
+
+    setDraftValue(value);
+  }
+
+  function fieldTitle(field: IntakeField) {
+    if (usesGroupedScreen) return groupedScreenFields.map((item) => item.label).join(" · ");
+
+    if (field.key === "dependents") {
+      const rawValue = String(draftValue).trim();
+      const dependents = normalizeNumber(rawValue);
+      const householdMembers = rawValue === "" || Number.isNaN(dependents) ? 0 : Math.max(1, dependents + 1);
+      return `${field.label}(${householdMembers}인 가구)`;
+    }
+
+    return field.label;
+  }
+
+  function renderQuickActions() {
+    return (
+      <div className="quick-actions embedded-actions">
+        <button onClick={() => setScenarioOpen(true)} type="button">
+          <ClipboardList size={17} aria-hidden="true" />
+          시나리오 다시보기
+        </button>
+        <button
+          onClick={() => {
+            if (phase === "mission") showMissionAssist(wrongAttempts.mission ?? 0);
+            else if (phase === "intake") showFieldAssist(activeField, activeAttemptCount);
+            else {
+              openAssist({
+                title: "답안 확인",
+                body: "최종미션을 제출한 뒤 계산 결과를 확인하는 화면입니다. 지원구분, 생활비, 월납부액, 상환기간 산식을 함께 봅니다.",
+              });
+            }
+          }}
+          type="button"
+        >
+          <HelpCircle size={17} aria-hidden="true" />
+          힌트
+        </button>
+      </div>
+    );
+  }
+
+  function updateRepaymentDraft(value: number) {
+    const snappedValue =
+      Math.abs(value - repaymentModel.targetPayment) <= PAYMENT_SNAP_TOLERANCE
+        ? repaymentModel.targetPayment
+        : value;
+
+    setRepaymentDraft(snappedValue);
   }
 
   function goPreviousPage() {
     setFeedback("");
 
     if (phase === "intake") {
+      if (usesGroupedScreen) {
+        const firstIndex = Math.min(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
+        if (firstIndex > 0) {
+          prepareField(firstIndex - 1);
+          return;
+        }
+
+        setPhase("scenario");
+        return;
+      }
+
       if (activeFieldIndex > 0) {
         prepareField(activeFieldIndex - 1);
         return;
@@ -278,6 +546,17 @@ function App() {
     }
 
     if (phase === "intake") {
+      if (usesGroupedScreen) {
+        const lastIndex = Math.max(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
+        if (lastIndex < level.fields.length - 1) {
+          prepareField(lastIndex + 1);
+          return;
+        }
+
+        setPhase("mission");
+        return;
+      }
+
       if (activeFieldIndex < level.fields.length - 1) {
         prepareField(activeFieldIndex + 1);
         return;
@@ -302,7 +581,7 @@ function App() {
       title: attempts >= 2 ? "정답을 확인할 수 있어요" : `${field.label} 힌트`,
       body: fieldHint(field),
       answer: attempts >= 2 ? fieldValueLabel(field.answer, field.unit) : undefined,
-      onFill: attempts >= 2 ? () => setDraftValue(field.answer) : undefined,
+      onFill: attempts >= 2 ? () => setDraftForField(field, field.answer) : undefined,
     });
   }
 
@@ -312,21 +591,89 @@ function App() {
       body: missionHint(calculation),
       answer:
         attempts >= 2
-          ? `${calculation.mission.supportType} / 월 ${formatMoney(calculation.mission.monthlyPayment)}만원 / ${calculation.mission.repaymentPeriod}개월`
+          ? `${calculation.mission.supportType} / 월납부액 ${formatMoney(calculation.mission.monthlyPayment)}만원 / ${calculation.mission.repaymentPeriod}개월`
           : undefined,
       onFill:
         attempts >= 2
           ? () =>
-              setMissionDraft({
-                supportType: calculation.mission.supportType,
-                monthlyPayment: String(calculation.mission.monthlyPayment),
-                repaymentPeriod: String(calculation.mission.repaymentPeriod),
-              })
+              {
+                setMissionDraft({
+                  supportType: calculation.mission.supportType,
+                  monthlyPayment: String(calculation.mission.monthlyPayment),
+                  repaymentPeriod: String(calculation.mission.repaymentPeriod),
+                });
+                setRepaymentDraft(calculation.mission.monthlyPayment);
+              }
           : undefined,
     });
   }
 
+  function checkGroupedFields() {
+    const parsedValues: Record<string, FieldValue> = {};
+
+    for (const field of groupedScreenFields) {
+      const draft = groupDraft[field.key] ?? "";
+      const value = field.type === "number" ? normalizeNumber(String(draft)) : draft;
+
+      if (field.type === "number" && (String(draft).trim() === "" || Number.isNaN(value))) {
+        setFeedback("숫자를 입력해 주세요.");
+        openAssist({
+          title: "입력 형식",
+          body: "숫자만 입력하면 됩니다. 예를 들어 2,400만원은 2400으로 입력하세요.",
+        });
+        return;
+      }
+
+      if (!isCorrectValue(field, value)) {
+        const nextAttempts = (wrongAttempts[field.key] ?? 0) + 1;
+        setWrongAttempts((current) => ({ ...current, [field.key]: nextAttempts }));
+        setLevelMistakes((count) => count + 1);
+        setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "힌트를 확인해 보세요.");
+        showFieldAssist(field, nextAttempts);
+        return;
+      }
+
+      parsedValues[field.key] = value;
+    }
+
+    const nextSolved = { ...solved };
+    const nextAnswers = { ...answers };
+
+    groupedScreenFields.forEach((field) => {
+      nextSolved[field.key] = true;
+      nextAnswers[field.key] = parsedValues[field.key];
+    });
+
+    setAnswers(nextAnswers);
+    setSolved(nextSolved);
+    setWrongAttempts((current) => {
+      const nextAttempts = { ...current };
+      groupedScreenFields.forEach((field) => {
+        nextAttempts[field.key] = 0;
+      });
+      return nextAttempts;
+    });
+    setFeedback(`${activeField.screen} 입력 완료`);
+
+    if (level.fields.every((item) => nextSolved[item.key])) {
+      setTimeout(() => {
+        setPhase("mission");
+        setFeedback("");
+      }, 380);
+      return;
+    }
+
+    const lastGroupIndex = Math.max(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
+    const nextIndex = nextOpenField(level, nextSolved, lastGroupIndex + 1);
+    setTimeout(() => prepareField(nextIndex), 280);
+  }
+
   function checkField() {
+    if (usesGroupedScreen) {
+      checkGroupedFields();
+      return;
+    }
+
     const field = activeField;
     const value = field.type === "number" ? normalizeNumber(String(draftValue)) : draftValue;
 
@@ -367,11 +714,13 @@ function App() {
   }
 
   function submitMission() {
-    const monthlyPayment = normalizeNumber(missionDraft.monthlyPayment);
-    const repaymentPeriod = normalizeNumber(missionDraft.repaymentPeriod);
+    const monthlyPayment = repaymentModel.monthlyPayment;
+    const repaymentPeriod = repaymentModel.repaymentPeriod;
     const mission = calculation.mission;
     const isCorrect =
       missionDraft.supportType === mission.supportType &&
+      !repaymentModel.cannotCalculatePeriod &&
+      !repaymentModel.exceedsMaxPeriod &&
       Math.abs(monthlyPayment - mission.monthlyPayment) <= 0.05 &&
       repaymentPeriod === mission.repaymentPeriod;
 
@@ -420,26 +769,160 @@ function App() {
     resetLevelState(levelIndex + 1);
   }
 
-  const shellClass = `phone-shell screen-${screen} phase-${phase} level-${level.level}`;
+  const tutorialPage = TUTORIAL_PAGES[tutorialIndex] ?? TUTORIAL_PAGES[0];
+  const tutorialProgress = ((tutorialIndex + 1) / TUTORIAL_PAGES.length) * 100;
+  const TutorialIcon = [Smartphone, ClipboardList, HelpCircle, Calculator, Trophy, Play][tutorialIndex] ?? ClipboardList;
+  const shellClass = `phone-shell screen-${screen} phase-${phase} ${
+    screen === "levelSelect" ? "level-select-tone" : `level-${level.level}`
+  }${
+    screen === "tutorial" ? ` tutorial-tone-${(tutorialIndex % 2) + 1}` : ""
+  }`;
 
   return (
     <div className="app">
       <main className={shellClass}>
         {screen === "start" && (
           <section className="start-screen intro-screen">
-            <button className="intro-poster" onClick={() => setScreen("levelSelect")} type="button">
+            <button
+              className="intro-poster"
+              onClick={() => {
+                setTutorialIndex(0);
+                setScreen("tutorial");
+              }}
+              type="button"
+            >
               <img src={startHero} alt="Mystery at the desk 시작 화면" />
             </button>
           </section>
         )}
 
-        {screen === "levelSelect" && (
-          <section className="start-screen level-select-screen">
-            <div className="level-select-nav">
-              <button className="return-home-action" onClick={() => setScreen("start")} type="button">
-                <ChevronLeft size={18} aria-hidden="true" />
-                첫 화면
+        {screen === "tutorial" && (
+          <section className="game-screen tutorial-screen">
+            <header className="game-header">
+              <button className="icon-action" onClick={() => setScreen("start")} type="button" title="표지">
+                <Home size={19} aria-hidden="true" />
               </button>
+              <button
+                className="arrow-action"
+                disabled={tutorialIndex === 0}
+                onClick={() => setTutorialIndex((index) => Math.max(0, index - 1))}
+                type="button"
+                title="이전 튜토리얼"
+              >
+                <ChevronLeft size={22} aria-hidden="true" />
+              </button>
+              <div>
+                <span>TUTORIAL</span>
+                <strong>{tutorialPage.badge}</strong>
+              </div>
+              <button
+                className="arrow-action"
+                onClick={() => {
+                  if (tutorialIndex < TUTORIAL_PAGES.length - 1) {
+                    setTutorialIndex((index) => index + 1);
+                    return;
+                  }
+                  setScreen("levelSelect");
+                }}
+                type="button"
+                title="다음 튜토리얼"
+              >
+                <ChevronRight size={22} aria-hidden="true" />
+              </button>
+              <div className="score-pill">
+                <ClipboardList size={16} aria-hidden="true" />
+                {tutorialIndex + 1}/{TUTORIAL_PAGES.length}
+              </div>
+            </header>
+
+            <div className="progress-wrap" aria-label="튜토리얼 진행률">
+              <span>{tutorialIndex + 1}/{TUTORIAL_PAGES.length}</span>
+              <div className="progress-line">
+                <i style={{ width: `${tutorialProgress}%` }} />
+              </div>
+            </div>
+
+            <article className="mission-panel tutorial-card">
+              <div className="panel-heading">
+                <TutorialIcon size={22} aria-hidden="true" />
+                <div>
+                  <span>{tutorialPage.badge}</span>
+                  <h2>{tutorialPage.title}</h2>
+                </div>
+              </div>
+
+              <div className="customer-log tutorial-log">
+                {tutorialPage.lines.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </div>
+
+              <div className="screen-chips" aria-label="튜토리얼 핵심">
+                {tutorialPage.chips.map((chip) => (
+                  <span key={chip}>{chip}</span>
+                ))}
+              </div>
+            </article>
+
+            <div className="start-actions tutorial-actions">
+              <button
+                className="primary-action"
+                onClick={() => {
+                  if (tutorialIndex < TUTORIAL_PAGES.length - 1) {
+                    setTutorialIndex((index) => index + 1);
+                    return;
+                  }
+                  setScreen("levelSelect");
+                }}
+                type="button"
+              >
+                {tutorialIndex < TUTORIAL_PAGES.length - 1 ? (
+                  <>
+                    <ChevronRight size={19} aria-hidden="true" />
+                    다음
+                  </>
+                ) : (
+                  <>
+                    <Play size={19} aria-hidden="true" />
+                    레벨 선택
+                  </>
+                )}
+              </button>
+              <button className="ghost-action" onClick={() => setScreen("levelSelect")} type="button">
+                  <ChevronRight size={19} aria-hidden="true" />
+                건너뛰기
+              </button>
+            </div>
+          </section>
+        )}
+
+        {screen === "levelSelect" && (
+          <section className="game-screen level-select-screen">
+            <header className="game-header">
+              <button className="icon-action" onClick={() => setScreen("start")} type="button" title="첫 화면">
+                <Home size={19} aria-hidden="true" />
+              </button>
+              <button className="arrow-action" onClick={() => setScreen("tutorial")} type="button" title="튜토리얼">
+                <ChevronLeft size={22} aria-hidden="true" />
+              </button>
+              <div>
+                <span>LEVEL SELECT</span>
+                <strong>레벨 선택</strong>
+              </div>
+              <button className="arrow-action" onClick={() => startRun()} type="button" title="시작">
+                <ChevronRight size={22} aria-hidden="true" />
+              </button>
+              <div className="score-pill">
+                <ClipboardList size={16} aria-hidden="true" />
+                {Math.max(1, unlockedLevel)}/{LEVELS.length}
+              </div>
+            </header>
+
+            <div className="progress-wrap" aria-label="잠금해제 진행률">
+              <span>{Math.max(1, unlockedLevel)}/{LEVELS.length}</span>
+              <div className="progress-line">
+                <i style={{ width: `${(Math.max(1, unlockedLevel) / LEVELS.length) * 100}%` }} />
+              </div>
             </div>
 
             <div className="stat-strip" aria-label="저장된 점수">
@@ -448,7 +931,7 @@ function App() {
                 <strong>{formatNumber(stats.bestScore)}</strong>
               </div>
               <div>
-                <span>해금</span>
+                <span>잠금해제</span>
                 <strong>{Math.max(1, unlockedLevel)} / {LEVELS.length}</strong>
               </div>
               <div>
@@ -518,60 +1001,25 @@ function App() {
               </div>
             </header>
 
-            <div className="progress-line" aria-label="레벨 진행률">
-              <i
-                style={{
-                  width: `${
-                    phase === "scenario"
-                      ? 4
-                      : phase === "intake"
-                        ? Math.max(16, Math.min(76, levelProgress))
-                        : phase === "mission"
-                          ? 86
-                          : 100
-                  }%`,
-                }}
-              />
-            </div>
-
-            {phase !== "scenario" && (
-              <div className="quick-actions">
-                <button onClick={() => setScenarioOpen(true)} type="button">
-                  <ClipboardList size={17} aria-hidden="true" />
-                  시나리오 다시보기
-                </button>
-                <button
-                  onClick={() => {
-                    if (phase === "mission") showMissionAssist(wrongAttempts.mission ?? 0);
-                    else if (phase === "intake") showFieldAssist(activeField, activeAttemptCount);
-                    else {
-                      openAssist({
-                        title: "답안 확인",
-                        body: "최종미션을 제출한 뒤 계산 결과를 확인하는 화면입니다. 지원구분, 생계비, 가용소득, 월변제금, 상환기간 산식을 함께 봅니다.",
-                      });
-                    }
-                  }}
-                  type="button"
-                >
-                  <HelpCircle size={17} aria-hidden="true" />
-                  힌트
-                </button>
+            <div className="progress-wrap" aria-label="전체 진행률">
+              <span>{level.level}/{LEVELS.length}</span>
+              <div className="progress-line">
+                <i style={{ width: `${phaseProgressWidth}%` }} />
               </div>
-            )}
+            </div>
 
             {phase === "scenario" && (
               <article className="mission-panel">
                 <div className="panel-heading">
                   <ClipboardList size={20} aria-hidden="true" />
                   <div>
-                    <span>{level.badge}</span>
-                    <h2>{level.goal}</h2>
+                    <h2>기본 상담 정보를 읽고 접수를 시작하세요.</h2>
                   </div>
                 </div>
 
                 <div className="customer-log">
                   {level.scenario.map((line) => (
-                    <p key={line}><span>고객</span>{line}</p>
+                    <p key={line}>{line}</p>
                   ))}
                 </div>
 
@@ -613,38 +1061,64 @@ function App() {
                 <div className="field-card">
                   <div className="field-head">
                     <span>{activeField.screen}</span>
-                    <strong>{activeField.label}</strong>
+                    <strong>{fieldTitle(activeField)}</strong>
                   </div>
 
-                  {activeField.type === "number" && (
-                    <label className="number-entry">
-                      <input
-                        inputMode="numeric"
-                        min="0"
-                        onChange={(event) => setDraftValue(event.target.value)}
-                        pattern="[0-9]*"
-                        placeholder="0"
-                        type="number"
-                        value={String(draftValue)}
-                      />
-                      <span>{activeField.unit}</span>
-                    </label>
-                  )}
-
-                  {(activeField.type === "choice" || activeField.type === "boolean") && (
-                    <div className="option-grid">
-                      {activeField.options?.map((option) => (
-                        <button
-                          className={draftValue === option.value ? "is-selected" : ""}
-                          key={`${activeField.key}-${String(option.value)}`}
-                          onClick={() => setDraftValue(option.value)}
-                          type="button"
-                        >
-                          {option.label}
-                        </button>
+                  {usesGroupedScreen ? (
+                    <div className="grouped-entry">
+                      {groupedScreenFields.map((field) => (
+                        <label className="number-entry stacked" key={field.key}>
+                          <span>{field.label}</span>
+                          <input
+                            inputMode="numeric"
+                            min="0"
+                            onChange={(event) =>
+                              setGroupDraft((current) => ({ ...current, [field.key]: event.target.value }))
+                            }
+                            pattern="[0-9]*"
+                            placeholder="0"
+                            type="number"
+                            value={String(groupDraft[field.key] ?? "")}
+                          />
+                          <em>{field.unit}</em>
+                        </label>
                       ))}
                     </div>
+                  ) : (
+                    <>
+                      {activeField.type === "number" && (
+                        <label className="number-entry">
+                          <input
+                            inputMode="numeric"
+                            min="0"
+                            onChange={(event) => setDraftValue(event.target.value)}
+                            pattern="[0-9]*"
+                            placeholder="0"
+                            type="number"
+                            value={String(draftValue)}
+                          />
+                          <span>{activeField.unit}</span>
+                        </label>
+                      )}
+
+                      {(activeField.type === "choice" || activeField.type === "boolean") && (
+                        <div className="option-grid">
+                          {activeField.options?.map((option) => (
+                            <button
+                              className={draftValue === option.value ? "is-selected" : ""}
+                              key={`${activeField.key}-${String(option.value)}`}
+                              onClick={() => setDraftValue(option.value)}
+                              type="button"
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
+
+                  {renderQuickActions()}
 
                   <button className="primary-action" onClick={checkField} type="button">
                     <Check size={19} aria-hidden="true" />
@@ -653,15 +1127,23 @@ function App() {
                 </div>
 
                 <div className="entry-list" aria-label="입력 완료 목록">
-                  {level.fields.map((field, index) => (
+                  {entryItems.map((item) => (
                     <button
-                      className={`${solved[field.key] ? "is-done" : ""} ${index === activeFieldIndex ? "is-active" : ""}`}
-                      key={field.key}
-                      onClick={() => prepareField(index)}
+                      className={`${
+                        item.fields.every((field) => solved[field.key]) ? "is-done" : ""
+                      } ${item.fields.some((field) => field.key === activeField.key) ? "is-active" : ""}`}
+                      key={item.key}
+                      onClick={() => prepareField(item.index)}
                       type="button"
                     >
-                      <span>{field.label}</span>
-                      <strong>{solved[field.key] ? fieldValueLabel(field.answer, field.unit) : "대기"}</strong>
+                      <span>{item.label}</span>
+                      <strong>
+                        {item.fields.every((field) => solved[field.key])
+                          ? item.isGroup
+                            ? "입력 완료"
+                            : fieldValueLabel(item.fields[0].answer, item.fields[0].unit)
+                          : "대기"}
+                      </strong>
                     </button>
                   ))}
                 </div>
@@ -684,17 +1166,17 @@ function App() {
                     <dd>{calculation.householdMembers}인 가구</dd>
                   </div>
                   <div>
-                    <dt>최대 생계비</dt>
-                    <dd>가구수에 따른 최저생계비 x 150% = {formatMoney(calculation.maxLivingExpense)}만원</dd>
+                    <dt>최대 생활비</dt>
+                    <dd>최저생계비({calculation.householdMembers}인 가구) x 150% = {formatMoney(calculation.maxLivingExpense)}만원</dd>
                   </div>
                   <div>
-                    <dt>생계비</dt>
+                    <dt>생활비</dt>
                     <dd>{formatMoney(calculation.adjustedLivingExpense)}만원</dd>
                   </div>
                   <div>
-                    <dt>월변제금</dt>
+                    <dt>월납부액</dt>
                     <dd>
-                      소득 {formatMoney(calculation.income)}만원 - 생계비 {formatMoney(calculation.adjustedLivingExpense)}만원 = {formatMoney(calculation.disposableIncome)}만원
+                      소득 {formatMoney(calculation.income)}만원 - 생활비 {formatMoney(calculation.adjustedLivingExpense)}만원 = {formatMoney(calculation.monthlyPayment)}만원
                     </dd>
                   </div>
                   <div>
@@ -731,60 +1213,93 @@ function App() {
                   <Trophy size={21} aria-hidden="true" />
                   <div>
                     <span>최종미션</span>
-                    <h2>지원구분, 월 변제금, 변제기간을 제출하세요.</h2>
+                    <h2>지원구분, 월납부액, 상환기간을 제출하세요.</h2>
                   </div>
                 </div>
 
-                <button
-                  className="repayment-tool"
-                  onClick={openRepaymentCalculator}
-                  type="button"
-                >
-                  <Calculator size={22} aria-hidden="true" />
-                  <span>
-                    <strong>원리금 계산기</strong>
-                    <small>신속 11% · 사전 6% · 개인워크아웃 원금 기준</small>
-                  </span>
-                </button>
+                <div className="support-select-card">
+                  <span className="support-label">지원구분</span>
+                  <div className="support-choice-grid" aria-label="지원구분 선택">
+                    {SUPPORT_OPTIONS.map((option) => {
+                      const optionMeta = supportOptionMeta(option);
 
-                <label className="select-entry">
-                  <span>지원구분</span>
-                  <select
-                    onChange={(event) => setMissionDraft((current) => ({ ...current, supportType: event.target.value }))}
-                    value={missionDraft.supportType}
+                      return (
+                        <button
+                          className={missionDraft.supportType === option ? "is-selected" : ""}
+                          key={option}
+                          onClick={() => setMissionDraft((current) => ({ ...current, supportType: option }))}
+                          type="button"
+                        >
+                          <span className="support-display">
+                            <strong>{optionMeta.title}</strong>
+                            <small>({optionMeta.detail})</small>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="income-balance-card">
+                  <div className="balance-head">
+                    <strong>생활비를 남기고 월납부액 찾기</strong>
+                    <span>총 소득 {formatMoney(calculation.income)}만원</span>
+                  </div>
+                  <div className="balance-values">
+                    <span>월납부액 {formatMoney(repaymentModel.monthlyPayment)}만원</span>
+                    <span>생활비 {formatMoney(repaymentModel.livingExpense)}만원</span>
+                  </div>
+                  <div
+                    className="balance-bar"
+                    style={{ "--payment-ratio": `${repaymentModel.paymentRatio}%` } as CSSProperties}
                   >
-                    <option value="">선택</option>
-                    {SUPPORT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <span className="bar-payment" aria-hidden="true" />
+                    <span className="bar-living" aria-hidden="true" />
+                    <i aria-hidden="true" />
+                    <input
+                      aria-label="월납부액과 생활비 조정"
+                      max={repaymentModel.maxPayment}
+                      min="0"
+                      onChange={(event) => updateRepaymentDraft(Number(event.target.value))}
+                      step="1"
+                      type="range"
+                      value={repaymentModel.monthlyPayment}
+                    />
+                  </div>
+                  <p className={`balance-feedback is-${repaymentModel.feedbackState}`}>
+                    {repaymentModel.feedback}
+                  </p>
+                  <div className="balance-result">
+                    <div>
+                      <span>월납부액</span>
+                      <strong>{formatMoney(repaymentModel.monthlyPayment)}만원</strong>
+                    </div>
+                    <div>
+                      <span>상환기간</span>
+                      <strong>
+                        {repaymentModel.periodLabel}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
 
-                <label className="number-entry compact">
-                  <span>월 변제금</span>
-                  <input
-                    inputMode="numeric"
-                    onChange={(event) => setMissionDraft((current) => ({ ...current, monthlyPayment: event.target.value }))}
-                    placeholder="0"
-                    type="number"
-                    value={missionDraft.monthlyPayment}
-                  />
-                  <em>만원</em>
-                </label>
+                <div className="answer-summary-card">
+                  <span>제출할 답안</span>
+                  <div>
+                    <small>지원구분</small>
+                    <strong>{missionDraft.supportType || "선택 필요"}</strong>
+                  </div>
+                  <div>
+                    <small>월납부액</small>
+                    <strong>{formatMoney(repaymentModel.monthlyPayment)}만원</strong>
+                  </div>
+                  <div>
+                    <small>상환기간</small>
+                    <strong>{repaymentModel.periodLabel}</strong>
+                  </div>
+                </div>
 
-                <label className="number-entry compact">
-                  <span>변제기간</span>
-                  <input
-                    inputMode="numeric"
-                    onChange={(event) => setMissionDraft((current) => ({ ...current, repaymentPeriod: event.target.value }))}
-                    placeholder="0"
-                    type="number"
-                    value={missionDraft.repaymentPeriod}
-                  />
-                  <em>개월</em>
-                </label>
+                {renderQuickActions()}
 
                 <button className="primary-action" onClick={submitMission} type="button">
                   <Check size={19} aria-hidden="true" />
@@ -914,7 +1429,7 @@ function App() {
               {calculatorResult ? (
                 <>
                   <div>
-                    <span>월 변제금</span>
+                    <span>월납부액</span>
                     <strong>{formatMoney(calculatorResult.monthlyPayment)}만원</strong>
                   </div>
                   <div>
@@ -927,7 +1442,7 @@ function App() {
                   </div>
                 </>
               ) : (
-                <p>채무 원금과 상환기간을 입력하면 월 변제금이 계산됩니다.</p>
+                <p>채무 원금과 상환기간을 입력하면 월납부액이 계산됩니다.</p>
               )}
             </div>
 

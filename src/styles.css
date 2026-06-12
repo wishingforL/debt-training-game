@@ -73,9 +73,9 @@ p {
 }
 
 .level-1 {
-  --bg: #ffd12f;
+  --bg: #ffcf2f;
   --bg-soft: #fff0a4;
-  --button-text: #ffd12f;
+  --button-text: #ffcf2f;
 }
 
 .level-2 {
@@ -91,9 +91,9 @@ p {
 }
 
 .level-4 {
-  --bg: #ffcb32;
-  --bg-soft: #fff0a4;
-  --button-text: #ffcb32;
+  --bg: #ff8a4b;
+  --bg-soft: #ffd9c1;
+  --button-text: #ff8a4b;
 }
 
 .level-5,
@@ -103,7 +103,26 @@ p {
   --button-text: #9f93f6;
 }
 
+.tutorial-tone-1 {
+  --bg: #ff6654;
+  --bg-soft: #ffd0c6;
+  --button-text: #ff6654;
+}
+
+.tutorial-tone-2 {
+  --bg: #ff834d;
+  --bg-soft: #ffd8bd;
+  --button-text: #ff834d;
+}
+
+.level-select-tone {
+  --bg: #ffcf2f;
+  --bg-soft: #fff0a4;
+  --button-text: #ffcf2f;
+}
+
 .start-screen,
+.tutorial-screen,
 .game-screen,
 .result-screen {
   min-height: 100dvh;
@@ -153,23 +172,23 @@ p {
   justify-content: flex-start;
 }
 
-.level-select-nav {
+.tutorial-screen {
+  justify-content: flex-start;
+  background: var(--bg);
+}
+
+.tutorial-card {
+  margin-top: 2px;
+}
+
+.tutorial-log p {
+  min-height: 64px;
   display: flex;
   align-items: center;
 }
 
-.return-home-action {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 14px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.72);
-  border: 0;
-  border-radius: 999px;
-  font-weight: 900;
+.tutorial-actions {
+  margin-top: auto;
 }
 
 .title-block {
@@ -386,7 +405,7 @@ h2 {
 .option-grid button,
 .quick-actions button,
 .field-tools button {
-  min-height: 52px;
+  min-height: 48px;
   border: 0;
   border-radius: 999px;
   display: inline-flex;
@@ -400,6 +419,13 @@ h2 {
   width: 100%;
   color: var(--button-text);
   background: #000;
+}
+
+.field-card .primary-action,
+.final-mission .primary-action {
+  min-height: 46px;
+  width: calc(100% + 4px);
+  margin-inline: -2px;
 }
 
 .ghost-action,
@@ -446,17 +472,35 @@ h2 {
   background: #000;
 }
 
+.progress-wrap {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 9px;
+  align-items: center;
+}
+
+.progress-wrap > span {
+  min-height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--button-text);
+  background: #000;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 1000;
+}
+
 .progress-line {
-  height: 7px;
+  height: 11px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.16);
   border-radius: 999px;
 }
 
 .progress-line i {
   display: block;
   height: 100%;
-  background: #000;
+  background: linear-gradient(90deg, #000 0%, #242424 100%);
   border-radius: 999px;
   transition: width 220ms ease;
 }
@@ -466,6 +510,10 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.embedded-actions {
+  margin-top: 2px;
 }
 
 .quick-actions button,
@@ -576,6 +624,11 @@ h2 {
   padding: 18px;
 }
 
+.grouped-entry {
+  display: grid;
+  gap: 10px;
+}
+
 .repayment-tool {
   min-height: 72px;
   display: grid;
@@ -605,6 +658,230 @@ h2 {
   color: var(--muted);
   font-weight: 900;
   line-height: 1.25;
+}
+
+.income-balance-card {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 24px;
+}
+
+.support-select-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 24px;
+}
+
+.support-label {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 1000;
+}
+
+.support-choice-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.support-choice-grid button {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border: 0;
+  border-radius: 18px;
+  text-align: left;
+  box-shadow: inset 0 0 0 2px transparent;
+}
+
+.support-choice-grid button.is-selected {
+  color: var(--button-text);
+  background: #000;
+}
+
+.support-choice-grid button.is-selected small {
+  color: rgba(255, 214, 0, 0.88);
+}
+
+.support-display {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.support-choice-grid strong {
+  font-size: 1.05rem;
+  font-weight: 1000;
+}
+
+.support-choice-grid small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.balance-head,
+.balance-values,
+.balance-result div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.balance-head {
+  align-items: flex-start;
+}
+
+.balance-head span,
+.balance-values span,
+.balance-result span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.balance-head span,
+.balance-head strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 1000;
+}
+
+.balance-values span {
+  color: var(--ink);
+}
+
+.balance-bar {
+  --payment-ratio: 0%;
+  position: relative;
+  height: 42px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+}
+
+.balance-bar .bar-payment,
+.balance-bar .bar-living {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.balance-bar .bar-payment {
+  right: auto;
+  width: var(--payment-ratio);
+  background: #000;
+}
+
+.balance-bar .bar-living {
+  left: var(--payment-ratio);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.balance-bar i {
+  position: absolute;
+  top: 50%;
+  left: var(--payment-ratio);
+  width: 22px;
+  height: 22px;
+  background: var(--button-text);
+  border: 3px solid #000;
+  border-radius: 50%;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.balance-bar input {
+  position: absolute;
+  inset: -10px 0;
+  width: 100%;
+  opacity: 0;
+  cursor: grab;
+}
+
+.balance-result {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  color: var(--button-text);
+  background: #000;
+  border-radius: 18px;
+}
+
+.balance-result span {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.balance-result strong {
+  color: var(--button-text);
+  font-size: 1rem;
+}
+
+.balance-feedback {
+  padding: 11px 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 16px;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.balance-feedback.is-danger {
+  color: #f00000;
+}
+
+.balance-feedback.is-notice {
+  color: #0047ff;
+}
+
+.balance-feedback.is-ok {
+  color: var(--ink);
+}
+
+.answer-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+}
+
+.answer-summary-card > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 1000;
+}
+
+.answer-summary-card div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.answer-summary-card small {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.answer-summary-card strong {
+  color: var(--ink);
+  text-align: right;
+  font-weight: 1000;
 }
 
 .field-head {
@@ -637,6 +914,12 @@ h2 {
   font-weight: 900;
 }
 
+.number-entry input::placeholder,
+.calculator-grid input::placeholder {
+  color: rgba(0, 0, 0, 0.18);
+  opacity: 1;
+}
+
 .number-entry > span,
 .number-entry em {
   color: var(--muted);
@@ -652,6 +935,17 @@ h2 {
 
 .number-entry.compact input {
   min-height: 52px;
+}
+
+.number-entry.stacked {
+  min-height: auto;
+  grid-template-columns: 78px 1fr 38px;
+  gap: 8px;
+}
+
+.number-entry.stacked input {
+  min-height: 50px;
+  font-size: 1.16rem;
 }
 
 .option-grid {
@@ -935,6 +1229,7 @@ h2 {
 .assist-sheet > p {
   color: var(--muted);
   font-weight: 800;
+  white-space: pre-line;
 }
 
 .answer-box {
@@ -967,7 +1262,8 @@ h2 {
 
 .sheet-actions {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto;
+  justify-content: start;
   gap: 10px;
 }
 
@@ -975,8 +1271,20 @@ h2 {
   background: rgba(0, 0, 0, 0.08);
 }
 
+.assist-sheet .sheet-actions .primary-action {
+  width: 116px;
+  min-height: 46px;
+  padding: 0 24px;
+  justify-self: end;
+}
+
+.assist-sheet .sheet-actions {
+  justify-content: end;
+}
+
 @media (max-width: 380px) {
   .start-screen,
+  .tutorial-screen,
   .game-screen,
   .result-screen {
     gap: 12px;
@@ -994,6 +1302,7 @@ h2 {
   .number-entry.compact {
     grid-template-columns: 72px 1fr 36px;
   }
+
 }
 
 @media (min-width: 720px) {
@@ -1008,6 +1317,7 @@ h2 {
   }
 
   .start-screen,
+  .tutorial-screen,
   .game-screen,
   .result-screen {
     min-height: min(860px, 100dvh);

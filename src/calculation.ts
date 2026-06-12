@@ -46,6 +46,7 @@ export type CalculationResult = {
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 const ceil1 = (value: number) => Math.ceil(value * 10) / 10;
+const roundWonUnit = (value: number) => Math.round(value);
 
 function numberField(fields: LevelData["fields"], key: string) {
   const value = fields.find((field) => field.key === key)?.answer;
@@ -95,6 +96,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
   const rawDisposableIncome = Math.max(0, round1(income - maxLivingExpense));
   const rawRepaymentMonths = repaymentMonthsForPayment(targetDebt, rawDisposableIncome, monthlyInterestRate);
   const cappedByMaxPeriod = !rawRepaymentMonths || rawRepaymentMonths > maxRepaymentMonths;
+  const rawMonthlyPayment = roundWonUnit(rawDisposableIncome);
 
   if (!cappedByMaxPeriod) {
     return {
@@ -115,11 +117,11 @@ export function calculateLevel(level: LevelData): CalculationResult {
       rawRepaymentMonths,
       disposableIncome: rawDisposableIncome,
       repaymentPeriod: rawRepaymentMonths,
-      monthlyPayment: rawDisposableIncome,
+      monthlyPayment: rawMonthlyPayment,
       cappedByMaxPeriod,
       mission: {
         supportType,
-        monthlyPayment: rawDisposableIncome,
+        monthlyPayment: rawMonthlyPayment,
         repaymentPeriod: rawRepaymentMonths,
       },
     };
@@ -132,6 +134,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
     maxRepaymentMonths,
     repaymentMonthsForPayment(targetDebt, Math.max(disposableIncome, 0.1), monthlyInterestRate) ?? maxRepaymentMonths,
   );
+  const roundedMonthlyPayment = roundWonUnit(disposableIncome);
 
   return {
     income,
@@ -151,11 +154,11 @@ export function calculateLevel(level: LevelData): CalculationResult {
     rawRepaymentMonths,
     disposableIncome,
     repaymentPeriod,
-    monthlyPayment: disposableIncome,
+    monthlyPayment: roundedMonthlyPayment,
     cappedByMaxPeriod,
     mission: {
       supportType,
-      monthlyPayment: disposableIncome,
+      monthlyPayment: roundedMonthlyPayment,
       repaymentPeriod,
     },
   };
