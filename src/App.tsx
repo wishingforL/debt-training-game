@@ -27,66 +27,62 @@ import startHero from "../assets/start-hero.jpg";
 
 const STORAGE_KEY = "rookie-debt-adjustment-game-v1";
 const PAYMENT_SNAP_TOLERANCE = 0.45;
+const MONEY_INPUT_SCALE = 10;
+const COMPRESSED_LIVING_EXPENSE_LIMIT = 60;
+const COMPRESSED_LIVING_EXPENSE_RATIO = 1 / 3;
+const MIN_LIVING_EXPENSE_RATIO = 0.9;
+const WRONG_GROUP_CLUE_KEY = "__wrongClue";
+const MONEY_FIELD_KEYS = new Set([
+  "income",
+  "debt",
+  "deposit",
+  "monthlyRent",
+  "jeonseDeposit",
+  "unsecuredDebt",
+  "securedDebt",
+  "depositAsset",
+]);
 const TUTORIAL_PAGES = [
   {
-    badge: "참여 안내",
-    title: "게임은 이렇게 진행됩니다.",
+    badge: "게임 소개",
+    title: "신입 상담원이 되어 접수 단서를 찾습니다.",
+    visual: "flow",
     lines: [
-      "표지를 누르면 튜토리얼을 확인한 뒤 레벨을 선택합니다.",
-      "각 레벨은 시나리오 읽기, 접수 입력, 최종미션 순서로 진행됩니다.",
-      "설치 없이 브라우저에서 플레이하며, 점수와 잠금해제 기록은 이 기기에 저장됩니다.",
+      "고객의 말을 읽고 접수에 필요한 정보를 찾아 정리하는 게임입니다.",
+      "마지막에는 지원구분, 월납부액, 상환기간을 제출합니다.",
     ],
-    chips: ["표지", "튜토리얼", "레벨 선택", "접수 시작"],
+    chips: ["시나리오", "단서 찾기", "지원구분", "최종미션"],
   },
   {
-    badge: "시나리오",
-    title: "고객의 말에서 접수 단서를 찾습니다.",
+    badge: "단서 찾기",
+    title: "문장 안의 단서를 찾아 누릅니다.",
+    visual: "scenario",
     lines: [
-      "고객이 말한 월소득, 부양가족, 연체일수, 채무 금액을 먼저 확인합니다.",
-      "레벨이 올라가면 주거, 보증금, 월세, 재산, 담보채무, 급여압류가 추가됩니다.",
-      "기억이 안 나면 언제든 시나리오 다시보기를 눌러 원문을 다시 확인하세요.",
+      "안내 문구가 나오면 시나리오 문장 안에서 해당 단서 텍스트를 직접 누릅니다.",
+      "맞는 단서를 누르면 그 부분이 동그라미로 표시되고, 아래에 값이 정리됩니다.",
+      "레벨이 올라가면 주거, 보증금, 월세, 재산, 담보채무 등이 추가됩니다.",
     ],
-    chips: ["소득", "가족", "연체", "채무", "주거", "재산"],
-  },
-  {
-    badge: "접수 입력",
-    title: "전산 항목을 하나씩 채웁니다.",
-    lines: [
-      "상단 탭은 현재 입력해야 할 전산 화면입니다.",
-      "숫자는 만원 단위로 입력합니다. 예를 들어 2,400만원은 2400으로 입력합니다.",
-      "틀리면 힌트를 확인할 수 있고, 두 번 이상 틀리면 정답 보기와 값 채우기가 열립니다.",
-    ],
-    chips: ["입력", "확인", "힌트", "정답 보기"],
+    chips: ["텍스트 터치", "동그라미 표시", "값 정리", "힌트"],
   },
   {
     badge: "지원구분",
     title: "연체일수로 지원구분을 판단합니다.",
+    visual: "support",
     lines: [
-      "30일 이하는 신속채무조정입니다. 원리금상환, 이자율 11%, 최대 120개월 기준입니다.",
-      "31~89일은 사전채무조정입니다. 원리금상환, 이자율 6%, 최대 120개월 기준입니다.",
-      "90일 이상은 개인워크아웃입니다. 원금상환, 최대 96개월 기준입니다.",
+      "시나리오에서 찾은 연체일수로 지원구분을 선택합니다.",
     ],
     chips: ["신속", "사전", "개인워크아웃"],
   },
   {
     badge: "월납부액",
     title: "생활비를 남기고 월납부액을 찾습니다.",
+    visual: "balance",
     lines: [
       "총 소득은 고정이고, 막대의 경계를 움직이면 생활비와 월납부액이 함께 바뀝니다.",
+      "금액은 10천원 단위로 표시됩니다.",
       "생활비가 부족하면 생활비를 늘리고, 계산불가가 뜨면 월납부액을 늘려야 합니다.",
-      "정답 근처는 0.45만원 범위에서 자동으로 붙어 손가락으로 맞추기 쉽게 되어 있습니다.",
     ],
     chips: ["총 소득", "생활비", "월납부액", "계산불가"],
-  },
-  {
-    badge: "점수",
-    title: "정확할수록 점수가 높아집니다.",
-    lines: [
-      "레벨 기본점수는 900점에 레벨 보너스가 더해집니다.",
-      "오답은 1회마다 80점이 차감됩니다. 그래도 레벨당 최소 240점은 보장됩니다.",
-      "시나리오 다시보기와 힌트는 연습용 도구입니다. 필요한 만큼 확인하며 익히세요.",
-    ],
-    chips: ["기본점수", "오답 감점", "최소점수", "기록 저장"],
   },
 ];
 const emptyStats: StoredStats = {
@@ -122,6 +118,64 @@ const formatNumber = (value: number) => new Intl.NumberFormat("ko-KR").format(va
 const normalizeNumber = (value: string) => Number(value.replace(/,/g, "").trim());
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
+function isMoneyField(field: IntakeField) {
+  return MONEY_FIELD_KEYS.has(field.key);
+}
+
+function formatAmount(valueInManwon: number) {
+  return `${formatMoney(Math.round(valueInManwon) * MONEY_INPUT_SCALE)}천원`;
+}
+
+function formatAmountNumber(valueInManwon: number) {
+  return formatMoney(Math.round(valueInManwon) * MONEY_INPUT_SCALE);
+}
+
+function fieldUnitLabel(field: IntakeField) {
+  return isMoneyField(field) ? "천원" : field.unit ?? "";
+}
+
+function toInputFieldValue(field: IntakeField, value: FieldValue | undefined) {
+  if (value === undefined || value === "") return "";
+  if (field.type === "number" && isMoneyField(field) && typeof value === "number") {
+    return round1(value * MONEY_INPUT_SCALE);
+  }
+  return value;
+}
+
+function toInternalFieldValue(field: IntakeField, value: number) {
+  return isMoneyField(field) ? round1(value / MONEY_INPUT_SCALE) : value;
+}
+
+function livingExpenseToSlider(livingExpense: number) {
+  const safeLivingExpense = Math.max(0, livingExpense);
+  if (safeLivingExpense <= COMPRESSED_LIVING_EXPENSE_LIMIT) {
+    return safeLivingExpense * COMPRESSED_LIVING_EXPENSE_RATIO;
+  }
+  return (
+    COMPRESSED_LIVING_EXPENSE_LIMIT * COMPRESSED_LIVING_EXPENSE_RATIO +
+    safeLivingExpense - COMPRESSED_LIVING_EXPENSE_LIMIT
+  );
+}
+
+function sliderMaxForIncome(income: number) {
+  return livingExpenseToSlider(income);
+}
+
+function paymentToSlider(monthlyPayment: number, income: number) {
+  return sliderMaxForIncome(income) - livingExpenseToSlider(Math.max(0, income - monthlyPayment));
+}
+
+function sliderToPayment(sliderValue: number, income: number) {
+  const maxSlider = sliderMaxForIncome(income);
+  const livingCoord = Math.max(0, maxSlider - sliderValue);
+  const compressedLimit = COMPRESSED_LIVING_EXPENSE_LIMIT * COMPRESSED_LIVING_EXPENSE_RATIO;
+  const livingExpense =
+    livingCoord <= compressedLimit
+      ? livingCoord / COMPRESSED_LIVING_EXPENSE_RATIO
+      : COMPRESSED_LIVING_EXPENSE_LIMIT + livingCoord - compressedLimit;
+  return round1(Math.max(0, Math.min(income, income - livingExpense)));
+}
+
 function loadStats(): StoredStats {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -137,7 +191,7 @@ function saveStats(stats: StoredStats) {
 }
 
 function isCorrectValue(field: IntakeField, value: FieldValue | undefined) {
-  if (field.type === "number") return Number(value) === Number(field.answer);
+  if (field.type === "number") return Math.abs(Number(value) - Number(field.answer)) < 0.001;
   return value === field.answer;
 }
 
@@ -146,43 +200,106 @@ function nextOpenField(level: LevelData, solved: Record<string, boolean>, fallba
   return next >= 0 ? next : Math.min(fallback, level.fields.length - 1);
 }
 
-function fieldValueLabel(value: FieldValue, unit?: string) {
+function fieldValueLabel(field: IntakeField, value: FieldValue = field.answer) {
   if (typeof value === "boolean") return value ? "있음" : "없음";
-  if (typeof value === "number") return `${formatNumber(value)}${unit ?? ""}`;
+  if (field.key === "dependents" && typeof value === "number") {
+    return `${formatNumber(value)}명 (${formatNumber(value + 1)}인 가구)`;
+  }
+  if (typeof value === "number") return isMoneyField(field) ? formatAmount(value) : `${formatNumber(value)}${fieldUnitLabel(field)}`;
   return value;
+}
+
+function fieldClue(field: IntakeField) {
+  return field.clue ?? fieldValueLabel(field);
+}
+
+function clueMarkerLabel(field: IntakeField) {
+  if (field.type === "choice") return String(field.answer);
+  return fieldValueLabel(field);
+}
+
+function scenarioMarkerLabel(field: IntakeField, line: string) {
+  const answerLabel = clueMarkerLabel(field);
+  const prefixedMoneyLabels: Record<string, string[]> = {
+    deposit: ["보증금"],
+    income: ["월"],
+    jeonseDeposit: ["전세보증금"],
+    monthlyRent: ["월세"],
+    securedDebt: ["주택담보대출은", "담보채무는"],
+    unsecuredDebt: ["신용채무는"],
+  };
+
+  const prefixedLabel = prefixedMoneyLabels[field.key]
+    ?.map((prefix) => `${prefix} ${answerLabel}`)
+    .find((label) => line.includes(label));
+  if (prefixedLabel) return prefixedLabel;
+
+  if (field.key === "dependents") {
+    const dependentPhrase = line.split("을 부양")[0]?.split("를 부양")[0]?.trim();
+    if (dependentPhrase && dependentPhrase !== line) return dependentPhrase;
+  }
+
+  if (field.key === "housingType") {
+    const rentMatch = line.match(/월세\s[\d,]+천원/);
+    if (rentMatch) return rentMatch[0];
+    const jeonseMatch = line.match(/전세보증금\s[\d,]+천원/);
+    if (jeonseMatch) return jeonseMatch[0];
+    if (line.includes("보증금")) return "보증금";
+  }
+
+  if (field.key === "hasVehicle" && line.includes("차량")) {
+    if (line.includes("차량 한 대")) return "차량 한 대";
+    return "차량";
+  }
+
+  if (field.key === "wageGarnishment" && line.includes("급여")) {
+    if (line.includes("급여가 압류")) return "급여가 압류";
+    return "급여";
+  }
+
+  if (field.key === "securedDebt" && Number(field.answer) === 0 && line.includes("담보채무")) {
+    return "담보채무";
+  }
+
+  if (line.includes(answerLabel)) return answerLabel;
+  return answerLabel;
+}
+
+function isCorrectClue(field: IntakeField, selectedClue: FieldValue | undefined) {
+  return String(selectedClue ?? "") === fieldClue(field);
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values));
 }
 
 function fieldHint(field: IntakeField) {
   const hints: Record<string, string> = {
-    income: "고객이 말한 월 소득 문장을 찾으세요. 금액은 만원 단위로 입력합니다.",
-    dependents: "부양한다고 말한 가족 수만 입력합니다. 본인은 부양가족 수에 넣지 않습니다.",
-    debt: "빚 또는 채무로 표현된 총액을 확인하세요.",
-    overdueDays: "며칠째 연체 중인지 말한 문장을 확인하세요.",
-    housingType: "보증금, 월세, 전세보증금이 나오면 주거형태는 임차입니다.",
-    deposit: "월세 보증금 금액만 만원 단위로 입력합니다.",
-    monthlyRent: "월세 금액만 입력합니다.",
-    jeonseDeposit: "전세보증금으로 말한 금액을 입력합니다.",
-    unsecuredDebt: "신용채무라고 말한 금액만 입력합니다.",
-    securedDebt: "주택담보대출처럼 담보가 있는 채무 금액입니다. 없으면 0입니다.",
-    hasVehicle: "본인 명의 차량이 있다고 했는지 확인합니다.",
-    depositAsset: "예금으로 보유한 금액을 입력합니다.",
-    wageGarnishment: "급여가 압류되어 있다고 했는지 확인합니다.",
+    income: "월 소득을 말한 단서 텍스트를 직접 터치하세요.",
+    dependents: "부양하고 있는 가족을 설명한 단서 텍스트를 터치하세요. 본인은 부양가족 수에 넣지 않습니다.",
+    debt: "빚 또는 채무 총액을 말한 금액 단서를 터치하세요.",
+    overdueDays: "며칠째 연체 중인지 말한 일수 단서를 터치하세요.",
+    housingType: "보증금, 월세, 전세보증금처럼 주거형태를 알 수 있는 단서를 터치하세요.",
+    deposit: "보증금 금액 단서를 터치하세요.",
+    monthlyRent: "월세 금액 단서를 터치하세요.",
+    jeonseDeposit: "전세보증금 금액 단서를 터치하세요.",
+    unsecuredDebt: "신용채무 금액 단서를 터치하세요.",
+    securedDebt: "담보채무 금액 또는 담보채무 없음 단서를 터치하세요.",
+    hasVehicle: "차량 보유 여부를 알 수 있는 단서를 터치하세요.",
+    depositAsset: "예금 보유액 단서를 터치하세요.",
+    wageGarnishment: "급여압류 여부를 알 수 있는 단서를 터치하세요.",
   };
 
-  return hints[field.key] ?? "상담 문장 안에서 같은 항목을 찾아 입력하세요.";
+  return hints[field.key] ?? "시나리오 문장 안에서 같은 항목의 단서 텍스트를 터치하세요.";
 }
 
 function missionHint(calculation: CalculationResult) {
   return [
-    "1. 지원구분: 연체일수 기준으로 판단합니다.",
-    "30일 이하 = 신속채무조정",
-    "31~89일 = 사전채무조정",
-    "90일 이상 = 개인워크아웃",
+    "1. 월납부액: 10천원 단위로 반올림하여 산출",
+    "소득 - 생활비",
+    "생활비를 변경해 최장 상환기간을 구합니다.",
     "",
-    "2. 월납부액: 반올림하여 산출",
-    "소득 - 생활비(생활비 변경해 최장 상환기간 구하기)",
-    "",
-    "3. 상환기간 계산 기준:",
+    "2. 상환기간 계산 기준:",
     "신속채무조정 = 원리금상환, 이자율 11%",
     "사전채무조정 = 원리금상환, 이자율 6%",
     "개인워크아웃 = 원금상환",
@@ -191,8 +308,8 @@ function missionHint(calculation: CalculationResult) {
 
 function supportOptionMeta(option: string) {
   const labels: Record<string, { detail: string; title: string }> = {
-    신속채무조정: { detail: "원리금상환, 이자율 11%", title: "신속채무조정" },
-    사전채무조정: { detail: "원리금상환, 이자율 6%", title: "사전채무조정" },
+    신속채무조정: { detail: "원리금상환, 이자율 11%(가정)", title: "신속채무조정" },
+    사전채무조정: { detail: "원리금상환, 이자율 6%(가정)", title: "사전채무조정" },
     개인워크아웃: { detail: "원금상환", title: "개인워크아웃" },
   };
 
@@ -244,11 +361,16 @@ function App() {
     months: "",
   });
   const [repaymentDraft, setRepaymentDraft] = useState<number | null>(null);
+  const [tutorialPayment, setTutorialPayment] = useState(50);
+  const [missionPage, setMissionPage] = useState<0 | 1>(0);
+  const [homeChoiceOpen, setHomeChoiceOpen] = useState(false);
+  const [showAllClues, setShowAllClues] = useState(false);
+  const [clueFilterScreen, setClueFilterScreen] = useState<string | null>(null);
 
   const level = LEVELS[levelIndex];
   const calculation = useMemo(() => calculateLevel(level), [level]);
   const calculatorResult = useMemo(() => {
-    const principal = normalizeNumber(calculatorDraft.principal);
+    const principal = normalizeNumber(calculatorDraft.principal) / MONEY_INPUT_SCALE;
     const annualRate = normalizeNumber(calculatorDraft.annualRate);
     const months = Math.floor(normalizeNumber(calculatorDraft.months));
 
@@ -310,8 +432,10 @@ function App() {
     const feedbackCannotCalculate = rawRepaymentMonths === null
       ? "월납부액이 낮아 상환기간 계산이 어렵습니다. 월납부액을 늘려주세요."
       : "최대 상환기간 안에 들어오지 않습니다. 월납부액을 늘려주세요.";
-    const paymentRatio = maxPayment > 0 ? (monthlyPayment / maxPayment) * 100 : 0;
-    const minimumLivingExpenseLimit = calculation.minimumLivingExpense * 0.7;
+    const sliderMax = sliderMaxForIncome(calculation.income);
+    const sliderValue = paymentToSlider(monthlyPayment, calculation.income);
+    const paymentRatio = sliderMax > 0 ? (sliderValue / sliderMax) * 100 : 0;
+    const minimumLivingExpenseLimit = calculation.minimumLivingExpense * MIN_LIVING_EXPENSE_RATIO;
     const feedbackState =
       livingExpense <= minimumLivingExpenseLimit
         ? "danger"
@@ -320,12 +444,12 @@ function App() {
           : "ok";
     const feedback =
       livingExpense <= minimumLivingExpenseLimit
-        ? "생활비가 부족합니다. 최저 생활비 70% 이하입니다. 생활비를 늘려주세요."
+        ? "생활비가 부족합니다. 최저 생활비 90% 이하입니다. 생활비를 늘려주세요."
           : livingExpense > calculation.maxLivingExpense
             ? "최대 생활비를 초과합니다. 월납부액을 늘려주세요."
             : cannotCalculatePeriod
               ? feedbackCannotCalculate
-              : `생활비 ${formatMoney(livingExpense)}만원을 확보했습니다. 남은 ${formatMoney(monthlyPayment)}만원을 월납부액으로 산정할 수 있습니다.`;
+              : `생활비 ${formatAmount(livingExpense)}을 확보했습니다. 남은 ${formatAmount(monthlyPayment)}을 월납부액으로 산정할 수 있습니다.`;
 
     return {
       cappedByMaxPeriod,
@@ -339,31 +463,95 @@ function App() {
       paymentRatio,
       periodLabel,
       repaymentPeriod,
+      sliderMax,
+      sliderValue,
       targetPayment: roundedRequiredPayment,
     };
   }, [calculation, missionDraft.supportType, repaymentDraft]);
   const activeField = level.fields[activeFieldIndex];
   const groupedScreenFields =
-    activeField?.screen === "채무현황" ? level.fields.filter((field) => field.screen === activeField.screen) : [];
-  const usesGroupedScreen = phase === "intake" && groupedScreenFields.length > 1;
+    activeField ? level.fields.filter((field) => field.screen === activeField.screen) : [];
+  const usesGroupedScreen = groupedScreenFields.length > 1;
+  const allCluesFound = level.fields.every((field) => solved[field.key]);
   const unlockedLevel = Math.min(stats.clearedLevel + 1, LEVELS.length);
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
-  const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 : 4;
+  const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
   const phaseProgressWidth = ((level.level - 1 + phaseStep / 4) / LEVELS.length) * 100;
 
+  const orderedScreenNames = useMemo(() => {
+    const ordered: string[] = [];
+
+    level.scenario.forEach((line) => {
+      level.fields
+        .filter((field) => fieldClue(field) === line)
+        .forEach((field) => {
+          if (!ordered.includes(field.screen)) ordered.push(field.screen);
+        });
+    });
+
+    level.systemScreens.forEach((screenName) => {
+      if (!ordered.includes(screenName)) ordered.push(screenName);
+    });
+
+    return ordered;
+  }, [level]);
+
   const screenProgress = useMemo(() => {
-    return level.systemScreens.map((screenName) => {
+    return orderedScreenNames.map((screenName) => {
       const fields = level.fields.filter((field) => field.screen === screenName);
       const total = fields.length || 1;
       const done = fields.filter((field) => solved[field.key]).length;
       return { screenName, done, total };
     });
-  }, [level, solved]);
+  }, [level, orderedScreenNames, solved]);
+
+  const activeScenarioTargets = useMemo(() => {
+    const currentFields = groupedScreenFields.length > 0 ? groupedScreenFields : [activeField];
+    return currentFields.filter(Boolean);
+  }, [activeField, groupedScreenFields]);
+
+  const clueSummaryGroups = useMemo(() => {
+    return orderedScreenNames
+      .map((screenName) => {
+        const fields = level.fields.filter((field) => field.screen === screenName);
+        const doneFields = fields.filter((field) => solved[field.key]);
+        return { screenName, doneFields, total: fields.length };
+      })
+      .filter((group) => group.doneFields.length > 0);
+  }, [level, orderedScreenNames, solved]);
+
+  const recentClueGroups = useMemo(() => {
+    if (clueSummaryGroups.length === 0) return [];
+
+    const activeScreen = activeField?.screen;
+    const recentScreen = clueSummaryGroups[clueSummaryGroups.length - 1]?.screenName;
+    const focusScreens = uniqueValues([activeScreen, recentScreen].filter(Boolean) as string[]);
+    const focusedGroups = clueSummaryGroups.filter((group) => focusScreens.includes(group.screenName));
+
+    return focusedGroups.length > 0 ? focusedGroups : clueSummaryGroups.slice(-1);
+  }, [activeField, clueSummaryGroups]);
+
+  const visibleClueGroups = useMemo(() => {
+    if (!clueFilterScreen) {
+      return showAllClues ? clueSummaryGroups : recentClueGroups;
+    }
+
+    return clueSummaryGroups.filter((group) => group.screenName === clueFilterScreen);
+  }, [clueFilterScreen, clueSummaryGroups, recentClueGroups, showAllClues]);
+
+  const scenarioPrompt = useMemo(() => {
+    if (allCluesFound) return "모든 단서를 찾았습니다.";
+
+    const labels = uniqueValues(activeScenarioTargets.filter((field) => !solved[field.key]).map((field) => field.label));
+    if (labels.length === 0) return `${activeField.screen} 단서를 찾아주세요.`;
+    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요.`;
+    return `${activeField.screen} 단서를 찾아주세요.`;
+  }, [activeField, activeScenarioTargets, allCluesFound, solved]);
 
   const entryItems = useMemo(() => {
     const groupedScreens = new Set<string>();
     return level.fields.flatMap((field, index) => {
-      const screenFields = field.screen === "채무현황" ? level.fields.filter((item) => item.screen === field.screen) : [];
+      const screenFields = level.fields.filter((item) => item.screen === field.screen);
 
       if (screenFields.length > 1) {
         if (groupedScreens.has(field.screen)) return [];
@@ -374,6 +562,16 @@ function App() {
       return [{ key: field.key, label: field.label, fields: [field], index, isGroup: false }];
     });
   }, [level]);
+
+  function entryStatusLabel(item: { fields: IntakeField[]; isGroup: boolean }) {
+    const doneFields = item.fields.filter((field) => solved[field.key]);
+
+    if (doneFields.length !== item.fields.length) {
+      return doneFields.length > 0 ? `${doneFields.length}/${item.fields.length}` : "대기";
+    }
+
+    return item.fields.map((field) => `${field.label} ${fieldValueLabel(field, answers[field.key] ?? field.answer)}`).join(" · ");
+  }
 
   function resetLevelState(nextLevelIndex: number, nextPhase: Phase = "scenario") {
     setLevelIndex(nextLevelIndex);
@@ -401,6 +599,10 @@ function App() {
       months: "",
     });
     setRepaymentDraft(null);
+    setMissionPage(0);
+    setHomeChoiceOpen(false);
+    setShowAllClues(false);
+    setClueFilterScreen(null);
   }
 
   function startRun(startIndex = selectedLevel) {
@@ -418,12 +620,12 @@ function App() {
 
   function prepareField(index: number) {
     const field = level.fields[index];
-    const screenFields = field.screen === "채무현황" ? level.fields.filter((item) => item.screen === field.screen) : [];
+    const screenFields = level.fields.filter((item) => item.screen === field.screen);
     setActiveFieldIndex(index);
-    setDraftValue(answers[field.key] ?? "");
+    setDraftValue(answers[field.key] !== undefined ? fieldClue(field) : "");
     setGroupDraft(
       screenFields.length > 1
-        ? Object.fromEntries(screenFields.map((item) => [item.key, answers[item.key] ?? ""]))
+        ? Object.fromEntries(screenFields.map((item) => [item.key, answers[item.key] !== undefined ? fieldClue(item) : ""]))
         : {},
     );
     setFeedback("");
@@ -444,23 +646,18 @@ function App() {
   }
 
   function setDraftForField(field: IntakeField, value: FieldValue) {
-    if (field.screen === "채무현황" && groupedScreenFields.some((item) => item.key === field.key)) {
-      setGroupDraft((current) => ({ ...current, [field.key]: value }));
+    const nextValue = value === field.answer ? fieldClue(field) : String(value);
+
+    if (groupedScreenFields.some((item) => item.key === field.key)) {
+      setGroupDraft((current) => ({ ...current, [field.key]: nextValue }));
       return;
     }
 
-    setDraftValue(value);
+    setDraftValue(nextValue);
   }
 
   function fieldTitle(field: IntakeField) {
     if (usesGroupedScreen) return groupedScreenFields.map((item) => item.label).join(" · ");
-
-    if (field.key === "dependents") {
-      const rawValue = String(draftValue).trim();
-      const dependents = normalizeNumber(rawValue);
-      const householdMembers = rawValue === "" || Number.isNaN(dependents) ? 0 : Math.max(1, dependents + 1);
-      return `${field.label}(${householdMembers}인 가구)`;
-    }
 
     return field.label;
   }
@@ -492,11 +689,349 @@ function App() {
     );
   }
 
+  function selectGroupedClue(clue: string) {
+    const matchedFields = groupedScreenFields.filter((field) => fieldClue(field) === clue);
+
+    setGroupDraft((current) => {
+      const next = { ...current };
+
+      if (matchedFields.length === 0) {
+        next[WRONG_GROUP_CLUE_KEY] = clue;
+        return next;
+      }
+
+      delete next[WRONG_GROUP_CLUE_KEY];
+      matchedFields.forEach((field) => {
+        next[field.key] = clue;
+      });
+      return next;
+    });
+  }
+
+  function selectedClueSummary(field: IntakeField) {
+    const selected = groupDraft[field.key] || "";
+    return selected ? "선택됨" : "단서 선택";
+  }
+
+  function isScenarioClueSelected(clue: string) {
+    if (usesGroupedScreen) {
+      return (
+        groupDraft[WRONG_GROUP_CLUE_KEY] === clue ||
+        groupedScreenFields.some((field) => groupDraft[field.key] === clue)
+      );
+    }
+
+    return draftValue === clue;
+  }
+
+  function scenarioFieldsForLine(line: string) {
+    return level.fields.filter((field) => fieldClue(field) === line);
+  }
+
+  function isScenarioLineComplete(line: string) {
+    const lineFields = scenarioFieldsForLine(line);
+    return lineFields.length > 0 && lineFields.every((field) => solved[field.key]);
+  }
+
+  function focusScreen(screenName: string) {
+    const targetIndex = level.fields.findIndex((field) => field.screen === screenName && !solved[field.key]);
+    const fallbackIndex = level.fields.findIndex((field) => field.screen === screenName);
+
+    if (targetIndex >= 0) {
+      prepareField(targetIndex);
+      return;
+    }
+
+    if (fallbackIndex >= 0) prepareField(fallbackIndex);
+  }
+
+  function handleScenarioFieldTap(field: IntakeField) {
+    handleScenarioFieldsTap([field]);
+  }
+
+  function handleScenarioFieldsTap(fields: IntakeField[]) {
+    const candidates = activeScenarioTargets.filter((field) => !solved[field.key]);
+
+    if (level.fields.every((field) => solved[field.key])) {
+      setFeedback("모든 단서를 확인했습니다. 지원구분을 선택하세요.");
+      return;
+    }
+
+    const targetFields = fields.filter((field) =>
+      candidates.some((candidate) => candidate.key === field.key) && !solved[field.key],
+    );
+
+    if (targetFields.length === 0) {
+      const targetField = candidates[0] ?? activeField;
+      const nextAttempts = (wrongAttempts[targetField.key] ?? 0) + 1;
+      setWrongAttempts((current) => ({ ...current, [targetField.key]: nextAttempts }));
+      setLevelMistakes((count) => count + 1);
+      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답 문장을 볼 수 있습니다." : "지금 찾는 항목의 단서가 아니에요.");
+      showFieldAssist(targetField, nextAttempts);
+      return;
+    }
+
+    const nextSolved = { ...solved };
+    const nextAnswers = { ...answers };
+    const nextAttempts = { ...wrongAttempts };
+
+    targetFields.forEach((field) => {
+      nextSolved[field.key] = true;
+      nextAnswers[field.key] = field.answer;
+      nextAttempts[field.key] = 0;
+    });
+
+    setAnswers(nextAnswers);
+    setSolved(nextSolved);
+    setWrongAttempts(nextAttempts);
+    setFeedback(`${targetFields.map((field) => field.label).join(" · ")} 단서 확인 완료`);
+
+    const nextIndex = nextOpenField(level, nextSolved, activeFieldIndex + 1);
+    setActiveFieldIndex(nextIndex);
+    setDraftValue("");
+    setGroupDraft({});
+  }
+
+  function renderScenarioMarker(fields: IntakeField[], label: string, mode: "inline" | "tail") {
+    const markerKey = fields.map((field) => field.key).join("-");
+    const isFound = fields.every((field) => solved[field.key]);
+
+    return (
+      <button
+        className={`scenario-clue-marker is-${mode} ${isFound ? "is-found" : ""}`}
+        key={markerKey}
+        onClick={() => handleScenarioFieldsTap(fields)}
+        type="button"
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function renderScenarioLine(line: string) {
+    const lineFields = scenarioFieldsForLine(line)
+      .map((field) => {
+        const label = scenarioMarkerLabel(field, line);
+        return {
+          field,
+          index: line.indexOf(label),
+          label,
+        };
+      })
+      .filter((marker) => marker.index >= 0)
+      .reduce<Array<{ fields: IntakeField[]; index: number; label: string }>>((markers, marker) => {
+        const existing = markers.find((item) => item.index === marker.index && item.label === marker.label);
+        if (existing) {
+          existing.fields.push(marker.field);
+          return markers;
+        }
+
+        markers.push({ fields: [marker.field], index: marker.index, label: marker.label });
+        return markers;
+      }, [])
+      .sort((first, second) => first.index - second.index || second.label.length - first.label.length);
+    const parts = [];
+    let cursor = 0;
+
+    lineFields.forEach((marker) => {
+      const index = marker.index;
+      if (index < cursor) return;
+
+      if (index > cursor) {
+        parts.push(line.slice(cursor, index));
+      }
+
+      parts.push(renderScenarioMarker(marker.fields, marker.label, "inline"));
+      cursor = index + marker.label.length;
+    });
+
+    if (cursor < line.length) {
+      parts.push(line.slice(cursor));
+    }
+
+    return (
+      <p className="scenario-line-text">
+        {parts}
+      </p>
+    );
+  }
+
+  function renderFoundClueSummary() {
+    if (clueSummaryGroups.length === 0) return null;
+    const isFiltered = clueFilterScreen !== null;
+    const hiddenCount = Math.max(0, clueSummaryGroups.length - recentClueGroups.length);
+
+    return (
+      <div className={`found-clue-summary ${isFiltered ? "is-filtered" : "is-all"}`} aria-label="찾은 단서 정리">
+        <div className="found-summary-head">
+          <span>찾은 단서</span>
+          {isFiltered && (
+            <button type="button" onClick={() => setClueFilterScreen(null)}>
+              전체
+            </button>
+          )}
+          {!isFiltered && hiddenCount > 0 && (
+            <button type="button" onClick={() => setShowAllClues((value) => !value)}>
+              {showAllClues ? "접기" : "전체 보기"}
+            </button>
+          )}
+        </div>
+
+        {visibleClueGroups.map((group) => {
+          return (
+            <section className="found-clue-group" key={group.screenName}>
+              <div className="found-group-head">
+                <span>{group.screenName}</span>
+                <strong>{group.doneFields.length}/{group.total}</strong>
+              </div>
+
+              <div className="found-group-list">
+                {group.doneFields.map((field) => (
+                  <div key={field.key}>
+                    <small>{field.label}</small>
+                    <em>{fieldValueLabel(field, answers[field.key] ?? field.answer)}</em>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderTutorialVisual(visual: string) {
+    if (visual === "flow") {
+      return (
+        <div className="tutorial-visual tutorial-flow">
+          {["시나리오", "단서 찾기", "지원구분", "최종미션"].map((item, index) => (
+            <div key={item}>
+              <span>{index + 1}</span>
+              <strong>{item}</strong>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (visual === "scenario") {
+      return (
+        <div className="tutorial-visual tutorial-scenario tutorial-clue-demo">
+          <div className="tutorial-clue-step">
+            <p><span className="scenario-clue-marker is-found">월 2,500천원</span> 벌고 있습니다.</p>
+            <label>
+              <span>소득</span>
+              <strong>월 소득 2,500천원</strong>
+              <em>✓</em>
+            </label>
+          </div>
+          <div className="tutorial-clue-step">
+            <p><span className="scenario-clue-marker is-found">배우자와 자녀 1명</span>을 부양하고 있습니다.</p>
+            <label>
+              <span>가족</span>
+              <strong>부양가족 2명 (3인 가구)</strong>
+              <em>✓</em>
+            </label>
+          </div>
+        </div>
+      );
+    }
+
+    if (visual === "intake") {
+      return (
+        <div className="tutorial-visual tutorial-intake">
+          <div>
+            <span>소득</span>
+            <small>1/1</small>
+          </div>
+          <div>
+            <span>채무현황</span>
+            <small>0/2</small>
+          </div>
+          <label>
+            <span>찾은 단서</span>
+            <strong>월 소득 2,500천원</strong>
+            <em>✓</em>
+          </label>
+          <label>
+            <span>가족</span>
+            <strong>부양가족 2명 (3인 가구)</strong>
+            <em>✓</em>
+          </label>
+        </div>
+      );
+    }
+
+    if (visual === "support") {
+      return (
+        <div className="tutorial-visual tutorial-support">
+          <div>
+            <strong>30일 이하</strong>
+            <span>신속채무조정</span>
+            <small>원리금상환 방식 / 이자율 11%(가정) / 상환기간 최대 120개월</small>
+          </div>
+          <div>
+            <strong>31~89일</strong>
+            <span>사전채무조정</span>
+            <small>원리금상환 방식 / 이자율 6%(가정) / 상환기간 최대 120개월</small>
+          </div>
+          <div>
+            <strong>90일 이상</strong>
+            <span>개인워크아웃</span>
+            <small>원금상환 방식 / 상환기간 최대 96개월</small>
+          </div>
+        </div>
+      );
+    }
+
+    if (visual === "balance") {
+      const tutorialIncome = 200;
+      const tutorialDebt = 1000;
+      const tutorialLivingExpense = Math.max(0, tutorialIncome - tutorialPayment);
+      const tutorialRepaymentPeriod = tutorialPayment > 0 ? Math.ceil(tutorialDebt / tutorialPayment) : null;
+      const tutorialRatio = tutorialIncome > 0 ? (tutorialPayment / tutorialIncome) * 100 : 0;
+
+      return (
+        <div className="tutorial-visual tutorial-balance">
+          <div className="tutorial-balance-head">
+            <strong>월납부액 {formatAmount(tutorialPayment)}</strong>
+            <strong>생활비 {formatAmount(tutorialLivingExpense)}</strong>
+          </div>
+          <div
+            className="balance-bar tutorial-balance-bar"
+            style={{ "--payment-ratio": `${tutorialRatio}%` } as CSSProperties}
+          >
+            <span className="bar-payment" aria-hidden="true" />
+            <span className="bar-living" aria-hidden="true" />
+            <i aria-hidden="true" />
+            <input
+              aria-label="튜토리얼 월납부액과 생활비 조정"
+              max={tutorialIncome}
+              min="0"
+              onChange={(event) => setTutorialPayment(Math.round(Number(event.target.value)))}
+              step="1"
+              type="range"
+              value={tutorialPayment}
+            />
+          </div>
+          <p className={tutorialLivingExpense <= 90 ? "is-danger" : ""}>
+            {tutorialLivingExpense <= 90
+              ? "생활비가 부족합니다. 생활비를 올려주세요."
+              : `신용채무 ${formatAmount(tutorialDebt)} · 상환기간 ${tutorialRepaymentPeriod ? `${tutorialRepaymentPeriod}개월` : "계산불가"}`}
+          </p>
+        </div>
+      );
+    }
+
+    return null;
+  }
+
   function updateRepaymentDraft(value: number) {
+    const paymentValue = Math.round(sliderToPayment(value, calculation.income));
     const snappedValue =
-      Math.abs(value - repaymentModel.targetPayment) <= PAYMENT_SNAP_TOLERANCE
+      Math.abs(paymentValue - repaymentModel.targetPayment) <= PAYMENT_SNAP_TOLERANCE
         ? repaymentModel.targetPayment
-        : value;
+        : paymentValue;
 
     setRepaymentDraft(snappedValue);
   }
@@ -526,26 +1061,110 @@ function App() {
     }
 
     if (phase === "mission") {
-      setPhase("intake");
-      prepareField(level.fields.length - 1);
+      if (missionPage === 1) {
+        setMissionPage(0);
+        return;
+      }
+
+      setPhase("scenario");
       return;
     }
 
     if (phase === "calculation") {
       setPhase("mission");
+      setMissionPage(1);
     }
+  }
+
+  function moveToMissionWhenReady() {
+    setMissionPage(0);
+    setPhase("mission");
+  }
+
+  function solveAllClues() {
+    setAnswers(Object.fromEntries(level.fields.map((field) => [field.key, field.answer])));
+    setSolved(Object.fromEntries(level.fields.map((field) => [field.key, true])));
+    setWrongAttempts((current) => {
+      const nextAttempts = { ...current };
+      level.fields.forEach((field) => {
+        nextAttempts[field.key] = 0;
+      });
+      return nextAttempts;
+    });
+    setDraftValue("");
+    setGroupDraft({});
+  }
+
+  function solveActiveIntakeScreen() {
+    const targetFields = usesGroupedScreen ? groupedScreenFields : [activeField];
+    const nextSolved = { ...solved };
+    const nextAnswers = { ...answers };
+
+    targetFields.forEach((field) => {
+      nextSolved[field.key] = true;
+      nextAnswers[field.key] = field.answer;
+    });
+
+    setSolved(nextSolved);
+    setAnswers(nextAnswers);
+    setWrongAttempts((current) => {
+      const nextAttempts = { ...current };
+      targetFields.forEach((field) => {
+        nextAttempts[field.key] = 0;
+      });
+      return nextAttempts;
+    });
+
+    return nextSolved;
+  }
+
+  function moveToSupportSelection() {
+    if (!allCluesFound) {
+      setFeedback("단서 완료 후 지원구분을 선택하세요.");
+      return;
+    }
+
+    setFeedback("");
+    setMissionPage(0);
+    setPhase("mission");
+  }
+
+  function moveToFinalMission() {
+    if (!missionDraft.supportType) {
+      setFeedback("지원구분을 먼저 선택해 주세요.");
+      return;
+    }
+
+    if (missionDraft.supportType !== calculation.mission.supportType) {
+      const nextAttempts = (wrongAttempts.supportType ?? 0) + 1;
+      setWrongAttempts((current) => ({ ...current, supportType: nextAttempts }));
+      setLevelMistakes((count) => count + 1);
+      setFeedback(
+        nextAttempts >= 2
+          ? "지원구분이 맞지 않아요. 힌트에서 연체일수 기준을 확인하세요."
+          : "지원구분이 맞지 않아요. 연체일수를 다시 확인하세요.",
+      );
+      if (nextAttempts >= 2) showMissionAssist(nextAttempts);
+      return;
+    }
+
+    setFeedback("");
+    setMissionPage(1);
   }
 
   function goNextPage() {
     setFeedback("");
 
     if (phase === "scenario") {
-      setPhase("intake");
-      prepareField(activeFieldIndex);
+      solveAllClues();
+      setMissionPage(0);
+      setPhase("mission");
       return;
     }
 
     if (phase === "intake") {
+      const nextSolved = solveActiveIntakeScreen();
+
       if (usesGroupedScreen) {
         const lastIndex = Math.max(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
         if (lastIndex < level.fields.length - 1) {
@@ -553,7 +1172,7 @@ function App() {
           return;
         }
 
-        setPhase("mission");
+        moveToMissionWhenReady();
         return;
       }
 
@@ -562,11 +1181,25 @@ function App() {
         return;
       }
 
-      setPhase("mission");
+      if (level.fields.every((field) => nextSolved[field.key])) {
+        moveToMissionWhenReady();
+      }
       return;
     }
 
     if (phase === "mission") {
+      if (missionPage === 0) {
+        setMissionDraft((current) => ({ ...current, supportType: calculation.mission.supportType }));
+        setMissionPage(1);
+        return;
+      }
+
+      setMissionDraft({
+        supportType: calculation.mission.supportType,
+        monthlyPayment: String(calculation.mission.monthlyPayment),
+        repaymentPeriod: String(calculation.mission.repaymentPeriod),
+      });
+      setRepaymentDraft(calculation.mission.monthlyPayment);
       setPhase("calculation");
       return;
     }
@@ -580,18 +1213,31 @@ function App() {
     openAssist({
       title: attempts >= 2 ? "정답을 확인할 수 있어요" : `${field.label} 힌트`,
       body: fieldHint(field),
-      answer: attempts >= 2 ? fieldValueLabel(field.answer, field.unit) : undefined,
+      answer: attempts >= 2 ? scenarioMarkerLabel(field, fieldClue(field)) : undefined,
       onFill: attempts >= 2 ? () => setDraftForField(field, field.answer) : undefined,
     });
   }
 
   function showMissionAssist(attempts: number) {
+    if (missionPage === 0) {
+      openAssist({
+        title: "지원구분 힌트",
+        body: [
+          "지원구분은 연체일수 기준으로 판단합니다.",
+          "30일 이하 = 신속채무조정",
+          "31~89일 = 사전채무조정",
+          "90일 이상 = 개인워크아웃",
+        ].join("\n"),
+      });
+      return;
+    }
+
     openAssist({
       title: attempts >= 2 ? "최종미션 정답을 확인할 수 있어요" : "최종미션 힌트",
       body: missionHint(calculation),
       answer:
         attempts >= 2
-          ? `${calculation.mission.supportType} / 월납부액 ${formatMoney(calculation.mission.monthlyPayment)}만원 / ${calculation.mission.repaymentPeriod}개월`
+          ? `${calculation.mission.supportType} / 월납부액 ${formatAmount(calculation.mission.monthlyPayment)} / ${calculation.mission.repaymentPeriod}개월`
           : undefined,
       onFill:
         attempts >= 2
@@ -611,29 +1257,34 @@ function App() {
   function checkGroupedFields() {
     const parsedValues: Record<string, FieldValue> = {};
 
-    for (const field of groupedScreenFields) {
-      const draft = groupDraft[field.key] ?? "";
-      const value = field.type === "number" ? normalizeNumber(String(draft)) : draft;
+    if (groupDraft[WRONG_GROUP_CLUE_KEY]) {
+      const nextAttempts = (wrongAttempts[activeField.key] ?? 0) + 1;
+      setWrongAttempts((current) => ({ ...current, [activeField.key]: nextAttempts }));
+      setLevelMistakes((count) => count + 1);
+      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "선택한 문장이 이 화면의 접수 항목과 맞지 않아요.");
+      showFieldAssist(activeField, nextAttempts);
+      return;
+    }
 
-      if (field.type === "number" && (String(draft).trim() === "" || Number.isNaN(value))) {
-        setFeedback("숫자를 입력해 주세요.");
-        openAssist({
-          title: "입력 형식",
-          body: "숫자만 입력하면 됩니다. 예를 들어 2,400만원은 2400으로 입력하세요.",
-        });
+    for (const field of groupedScreenFields) {
+      const selectedClue = groupDraft[field.key] ?? "";
+
+      if (!selectedClue) {
+        setFeedback("필요한 시나리오 단서를 모두 선택해 주세요.");
+        showFieldAssist(field, wrongAttempts[field.key] ?? 0);
         return;
       }
 
-      if (!isCorrectValue(field, value)) {
+      if (!isCorrectClue(field, selectedClue)) {
         const nextAttempts = (wrongAttempts[field.key] ?? 0) + 1;
         setWrongAttempts((current) => ({ ...current, [field.key]: nextAttempts }));
         setLevelMistakes((count) => count + 1);
-        setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "힌트를 확인해 보세요.");
+        setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "선택한 단서가 항목과 맞지 않아요.");
         showFieldAssist(field, nextAttempts);
         return;
       }
 
-      parsedValues[field.key] = value;
+      parsedValues[field.key] = field.answer;
     }
 
     const nextSolved = { ...solved };
@@ -653,7 +1304,7 @@ function App() {
       });
       return nextAttempts;
     });
-    setFeedback(`${activeField.screen} 입력 완료`);
+    setFeedback(`${activeField.screen} 단서 확인 완료`);
 
     if (level.fields.every((item) => nextSolved[item.key])) {
       setTimeout(() => {
@@ -675,31 +1326,27 @@ function App() {
     }
 
     const field = activeField;
-    const value = field.type === "number" ? normalizeNumber(String(draftValue)) : draftValue;
 
-    if (field.type === "number" && (String(draftValue).trim() === "" || Number.isNaN(value))) {
-      setFeedback("숫자를 입력해 주세요.");
-      openAssist({
-        title: "입력 형식",
-        body: "숫자만 입력하면 됩니다. 예를 들어 2,400만원은 2400으로 입력하세요.",
-      });
+    if (!draftValue) {
+      setFeedback("시나리오에서 맞는 단서를 선택해 주세요.");
+      showFieldAssist(field, activeAttemptCount);
       return;
     }
 
-    if (!isCorrectValue(field, value)) {
+    if (!isCorrectClue(field, draftValue)) {
       const nextAttempts = (wrongAttempts[field.key] ?? 0) + 1;
       setWrongAttempts((current) => ({ ...current, [field.key]: nextAttempts }));
       setLevelMistakes((count) => count + 1);
-      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "힌트를 확인해 보세요.");
+      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "선택한 단서가 항목과 맞지 않아요.");
       showFieldAssist(field, nextAttempts);
       return;
     }
 
     const nextSolved = { ...solved, [field.key]: true };
-    setAnswers((current) => ({ ...current, [field.key]: value }));
+    setAnswers((current) => ({ ...current, [field.key]: field.answer }));
     setSolved(nextSolved);
     setWrongAttempts((current) => ({ ...current, [field.key]: 0 }));
-    setFeedback(`${field.label} 입력 완료`);
+    setFeedback(`${field.label} 단서 확인 완료`);
 
     if (level.fields.every((item) => nextSolved[item.key])) {
       setTimeout(() => {
@@ -738,7 +1385,9 @@ function App() {
   }
 
   function finishLevel() {
-    const levelScore = Math.max(240, 900 + level.level * 120 - levelMistakes * 80);
+    const foundClueCount = level.fields.filter((field) => solved[field.key]).length;
+    const clueScore = foundClueCount * 20;
+    const levelScore = Math.max(100, 500 + level.level * 60 + clueScore - levelMistakes * 50);
     const nextResult = {
       level: level.level,
       title: level.title,
@@ -771,7 +1420,7 @@ function App() {
 
   const tutorialPage = TUTORIAL_PAGES[tutorialIndex] ?? TUTORIAL_PAGES[0];
   const tutorialProgress = ((tutorialIndex + 1) / TUTORIAL_PAGES.length) * 100;
-  const TutorialIcon = [Smartphone, ClipboardList, HelpCircle, Calculator, Trophy, Play][tutorialIndex] ?? ClipboardList;
+  const TutorialIcon = [Smartphone, ClipboardList, HelpCircle, Calculator][tutorialIndex] ?? ClipboardList;
   const shellClass = `phone-shell screen-${screen} phase-${phase} ${
     screen === "levelSelect" ? "level-select-tone" : `level-${level.level}`
   }${
@@ -850,6 +1499,8 @@ function App() {
                   <h2>{tutorialPage.title}</h2>
                 </div>
               </div>
+
+              {renderTutorialVisual(tutorialPage.visual)}
 
               <div className="customer-log tutorial-log">
                 {tutorialPage.lines.map((line) => (
@@ -976,7 +1627,7 @@ function App() {
         {screen === "game" && (
           <section className="game-screen">
             <header className="game-header">
-              <button className="icon-action" onClick={() => setScreen("start")} type="button" title="시작 화면">
+              <button className="icon-action" onClick={() => setHomeChoiceOpen(true)} type="button" title="이동 메뉴">
                 <Home size={19} aria-hidden="true" />
               </button>
               <button
@@ -1013,32 +1664,51 @@ function App() {
                 <div className="panel-heading">
                   <ClipboardList size={20} aria-hidden="true" />
                   <div>
-                    <h2>기본 상담 정보를 읽고 접수를 시작하세요.</h2>
+                    <h2>기본 상담 정보를 읽고 단서를 찾아 접수해주세요.</h2>
                   </div>
                 </div>
 
+                <p className="scenario-find-prompt">{scenarioPrompt}</p>
+
                 <div className="customer-log">
-                  {level.scenario.map((line) => (
-                    <p key={line}>{line}</p>
-                  ))}
+                  {level.scenario.map((line) => {
+                    return (
+                      <div className={isScenarioLineComplete(line) ? "is-found" : ""} key={line}>
+                        {renderScenarioLine(line)}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="screen-chips" aria-label="사용 전산 화면">
-                  {level.systemScreens.map((screenName) => (
-                    <span key={screenName}>{screenName}</span>
+                  {screenProgress.map((item) => (
+                    <button
+                      className={`${item.done === item.total ? "is-complete" : ""} ${
+                        activeField.screen === item.screenName ? "is-active" : ""
+                      } ${clueFilterScreen === item.screenName ? "is-filtered" : ""}`}
+                      key={item.screenName}
+                      onClick={() => {
+                        focusScreen(item.screenName);
+                        setShowAllClues(false);
+                        setClueFilterScreen((current) => (current === item.screenName ? null : item.screenName));
+                      }}
+                      type="button"
+                    >
+                      <span>{item.screenName}</span>
+                      <small>{item.done}/{item.total}</small>
+                    </button>
                   ))}
                 </div>
 
+                {renderFoundClueSummary()}
+
                 <button
                   className="primary-action"
-                  onClick={() => {
-                    setPhase("intake");
-                    prepareField(0);
-                  }}
+                  onClick={moveToSupportSelection}
                   type="button"
                 >
                   <Smartphone size={19} aria-hidden="true" />
-                  접수 시작
+                  지원구분 선택하기
                 </button>
               </article>
             )}
@@ -1064,59 +1734,45 @@ function App() {
                     <strong>{fieldTitle(activeField)}</strong>
                   </div>
 
-                  {usesGroupedScreen ? (
-                    <div className="grouped-entry">
-                      {groupedScreenFields.map((field) => (
-                        <label className="number-entry stacked" key={field.key}>
-                          <span>{field.label}</span>
-                          <input
-                            inputMode="numeric"
-                            min="0"
-                            onChange={(event) =>
-                              setGroupDraft((current) => ({ ...current, [field.key]: event.target.value }))
-                            }
-                            pattern="[0-9]*"
-                            placeholder="0"
-                            type="number"
-                            value={String(groupDraft[field.key] ?? "")}
-                          />
-                          <em>{field.unit}</em>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      {activeField.type === "number" && (
-                        <label className="number-entry">
-                          <input
-                            inputMode="numeric"
-                            min="0"
-                            onChange={(event) => setDraftValue(event.target.value)}
-                            pattern="[0-9]*"
-                            placeholder="0"
-                            type="number"
-                            value={String(draftValue)}
-                          />
-                          <span>{activeField.unit}</span>
-                        </label>
-                      )}
-
-                      {(activeField.type === "choice" || activeField.type === "boolean") && (
-                        <div className="option-grid">
-                          {activeField.options?.map((option) => (
-                            <button
-                              className={draftValue === option.value ? "is-selected" : ""}
-                              key={`${activeField.key}-${String(option.value)}`}
-                              onClick={() => setDraftValue(option.value)}
-                              type="button"
-                            >
-                              {option.label}
-                            </button>
-                          ))}
+                  <div className="clue-task">
+                    <span>시나리오에서 맞는 단서를 선택하세요.</span>
+                    {usesGroupedScreen ? (
+                      <div className="clue-target-grid">
+                        {groupedScreenFields.map((field) => (
+                          <div className={groupDraft[field.key] ? "is-selected" : ""} key={field.key}>
+                            <small>{field.label}</small>
+                            <strong>{selectedClueSummary(field)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="clue-target-grid single-target">
+                        <div className={draftValue ? "is-selected" : ""}>
+                          <small>{activeField.label}</small>
+                          <strong>{draftValue ? "선택됨" : "단서 선택"}</strong>
                         </div>
-                      )}
-                    </>
-                  )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="scenario-choice-list" aria-label="시나리오 단서 선택">
+                    {level.scenario.map((line) => (
+                      <button
+                        className={isScenarioClueSelected(line) ? "is-selected" : ""}
+                        key={line}
+                        onClick={() => {
+                          if (usesGroupedScreen) {
+                            selectGroupedClue(line);
+                            return;
+                          }
+                          setDraftValue(line);
+                        }}
+                        type="button"
+                      >
+                        {line}
+                      </button>
+                    ))}
+                  </div>
 
                   {renderQuickActions()}
 
@@ -1126,7 +1782,7 @@ function App() {
                   </button>
                 </div>
 
-                <div className="entry-list" aria-label="입력 완료 목록">
+                <div className="entry-list" aria-label="단서 확인 목록">
                   {entryItems.map((item) => (
                     <button
                       className={`${
@@ -1137,13 +1793,7 @@ function App() {
                       type="button"
                     >
                       <span>{item.label}</span>
-                      <strong>
-                        {item.fields.every((field) => solved[field.key])
-                          ? item.isGroup
-                            ? "입력 완료"
-                            : fieldValueLabel(item.fields[0].answer, item.fields[0].unit)
-                          : "대기"}
-                      </strong>
+                      <strong>{entryStatusLabel(item)}</strong>
                     </button>
                   ))}
                 </div>
@@ -1159,32 +1809,31 @@ function App() {
                   </div>
                   <div>
                     <dt>대상채무</dt>
-                    <dd>{formatMoney(calculation.targetDebt)}만원</dd>
-                  </div>
-                  <div>
-                    <dt>가구수</dt>
-                    <dd>{calculation.householdMembers}인 가구</dd>
+                    <dd>{formatAmount(calculation.targetDebt)}</dd>
                   </div>
                   <div>
                     <dt>최대 생활비</dt>
-                    <dd>최저생계비({calculation.householdMembers}인 가구) x 150% = {formatMoney(calculation.maxLivingExpense)}만원</dd>
+                    <dd>최저생계비({calculation.householdMembers}인 가구) x 150% = {formatAmount(calculation.maxLivingExpense)}</dd>
                   </div>
                   <div>
                     <dt>생활비</dt>
-                    <dd>{formatMoney(calculation.adjustedLivingExpense)}만원</dd>
+                    <dd>{formatAmount(calculation.adjustedLivingExpense)}</dd>
                   </div>
                   <div>
                     <dt>월납부액</dt>
                     <dd>
-                      소득 {formatMoney(calculation.income)}만원 - 생활비 {formatMoney(calculation.adjustedLivingExpense)}만원 = {formatMoney(calculation.monthlyPayment)}만원
+                      <span>소득 - 생활비</span>
+                      <strong>
+                        {formatAmount(calculation.income)} - {formatAmount(calculation.adjustedLivingExpense)} = {formatAmount(calculation.monthlyPayment)}
+                      </strong>
                     </dd>
                   </div>
                   <div>
                     <dt>상환기간</dt>
                     <dd>
                       {calculation.annualInterestRate > 0
-                        ? `${formatMoney(calculation.targetDebt)}만원을 연 ${formatMoney(calculation.annualInterestRate * 100)}% ${calculation.repaymentMethod} 조건으로 계산 = ${calculation.repaymentPeriod}개월`
-                        : `${formatMoney(calculation.targetDebt)} / ${formatMoney(calculation.disposableIncome)} = ${calculation.repaymentPeriod}개월`}
+                        ? `${formatAmount(calculation.targetDebt)}을 연 ${formatMoney(calculation.annualInterestRate * 100)}% ${calculation.repaymentMethod} 조건으로 계산 = ${calculation.repaymentPeriod}개월`
+                        : `${formatAmountNumber(calculation.targetDebt)} / ${formatAmountNumber(calculation.monthlyPayment)} = ${calculation.repaymentPeriod}개월`}
                       {calculation.cappedByMaxPeriod ? `, 최대 ${calculation.maxRepaymentMonths}개월 적용` : ""}
                     </dd>
                   </div>
@@ -1212,99 +1861,127 @@ function App() {
                 <div className="panel-heading">
                   <Trophy size={21} aria-hidden="true" />
                   <div>
-                    <span>최종미션</span>
-                    <h2>지원구분, 월납부액, 상환기간을 제출하세요.</h2>
+                    <span>{missionPage === 0 ? "지원구분 선택하기" : "최종미션"}</span>
+                    <h2>{missionPage === 0 ? "연체일수 기준으로 지원구분을 선택하세요." : "월납부액, 상환기간을 제출하세요."}</h2>
                   </div>
                 </div>
 
-                <div className="support-select-card">
-                  <span className="support-label">지원구분</span>
-                  <div className="support-choice-grid" aria-label="지원구분 선택">
-                    {SUPPORT_OPTIONS.map((option) => {
-                      const optionMeta = supportOptionMeta(option);
+                {missionPage === 0 && (
+                  <>
+                    <div className="support-select-card">
+                      <span className="support-label">지원구분</span>
+                      <div className="support-choice-grid" aria-label="지원구분 선택">
+                        {SUPPORT_OPTIONS.map((option) => {
+                          const optionMeta = supportOptionMeta(option);
 
-                      return (
-                        <button
-                          className={missionDraft.supportType === option ? "is-selected" : ""}
-                          key={option}
-                          onClick={() => setMissionDraft((current) => ({ ...current, supportType: option }))}
-                          type="button"
-                        >
-                          <span className="support-display">
-                            <strong>{optionMeta.title}</strong>
-                            <small>({optionMeta.detail})</small>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                          return (
+                            <button
+                              aria-disabled={!allCluesFound}
+                              className={`${missionDraft.supportType === option ? "is-selected" : ""} ${!allCluesFound ? "is-disabled" : ""}`}
+                              key={option}
+                              onClick={() => {
+                                if (!allCluesFound) {
+                                  setFeedback("단서 완료 후 지원구분을 선택하세요.");
+                                  return;
+                                }
 
-                <div className="income-balance-card">
-                  <div className="balance-head">
-                    <strong>생활비를 남기고 월납부액 찾기</strong>
-                    <span>총 소득 {formatMoney(calculation.income)}만원</span>
-                  </div>
-                  <div className="balance-values">
-                    <span>월납부액 {formatMoney(repaymentModel.monthlyPayment)}만원</span>
-                    <span>생활비 {formatMoney(repaymentModel.livingExpense)}만원</span>
-                  </div>
-                  <div
-                    className="balance-bar"
-                    style={{ "--payment-ratio": `${repaymentModel.paymentRatio}%` } as CSSProperties}
-                  >
-                    <span className="bar-payment" aria-hidden="true" />
-                    <span className="bar-living" aria-hidden="true" />
-                    <i aria-hidden="true" />
-                    <input
-                      aria-label="월납부액과 생활비 조정"
-                      max={repaymentModel.maxPayment}
-                      min="0"
-                      onChange={(event) => updateRepaymentDraft(Number(event.target.value))}
-                      step="1"
-                      type="range"
-                      value={repaymentModel.monthlyPayment}
-                    />
-                  </div>
-                  <p className={`balance-feedback is-${repaymentModel.feedbackState}`}>
-                    {repaymentModel.feedback}
-                  </p>
-                  <div className="balance-result">
-                    <div>
-                      <span>월납부액</span>
-                      <strong>{formatMoney(repaymentModel.monthlyPayment)}만원</strong>
+                                setFeedback("");
+                                setMissionDraft((current) => ({ ...current, supportType: option }));
+                              }}
+                              type="button"
+                            >
+                              <span className="support-display">
+                                <strong>{optionMeta.title}</strong>
+                                <small>({optionMeta.detail})</small>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div>
-                      <span>상환기간</span>
-                      <strong>
-                        {repaymentModel.periodLabel}
-                      </strong>
+
+                    {renderQuickActions()}
+
+                    <button className="primary-action" onClick={moveToFinalMission} type="button">
+                      <ChevronRight size={19} aria-hidden="true" />
+                      최종미션
+                    </button>
+                  </>
+                )}
+
+                {missionPage === 1 && (
+                  <>
+                    <div className="living-range-hint">
+                      <div>
+                        <span>생활비 범위 힌트</span>
+                        <strong>{calculation.householdMembers}인 가구</strong>
+                      </div>
+                      <div>
+                        <small>MIN 생활비</small>
+                        <strong>{formatAmount(calculation.minimumLivingExpense * MIN_LIVING_EXPENSE_RATIO)}</strong>
+                      </div>
+                      <div>
+                        <small>MAX 생활비</small>
+                        <strong>{formatAmount(calculation.maxLivingExpense)}</strong>
+                      </div>
+                      <p>최저생계비 90%~150% 범위에서 생활비를 확인하세요.</p>
                     </div>
-                  </div>
-                </div>
 
-                <div className="answer-summary-card">
-                  <span>제출할 답안</span>
-                  <div>
-                    <small>지원구분</small>
-                    <strong>{missionDraft.supportType || "선택 필요"}</strong>
-                  </div>
-                  <div>
-                    <small>월납부액</small>
-                    <strong>{formatMoney(repaymentModel.monthlyPayment)}만원</strong>
-                  </div>
-                  <div>
-                    <small>상환기간</small>
-                    <strong>{repaymentModel.periodLabel}</strong>
-                  </div>
-                </div>
+                    <div className="income-balance-card">
+                      <div className="balance-head">
+                        <strong>생활비를 남기고 월납부액 찾기</strong>
+                        <span>총 소득 {formatAmount(calculation.income)}</span>
+                      </div>
+                      <div className="balance-values">
+                        <span>월납부액 {formatAmount(repaymentModel.monthlyPayment)}</span>
+                        <span>생활비 {formatAmount(repaymentModel.livingExpense)}</span>
+                      </div>
+                      <div
+                        className="balance-bar"
+                        style={{ "--payment-ratio": `${repaymentModel.paymentRatio}%` } as CSSProperties}
+                      >
+                        <span className="bar-payment" aria-hidden="true" />
+                        <span className="bar-living" aria-hidden="true" />
+                        <i aria-hidden="true" />
+                        <input
+                          aria-label="월납부액과 생활비 조정"
+                          max={repaymentModel.sliderMax}
+                          min="0"
+                          onChange={(event) => updateRepaymentDraft(Number(event.target.value))}
+                          step="0.1"
+                          type="range"
+                          value={repaymentModel.sliderValue}
+                        />
+                      </div>
+                      <p className={`balance-feedback is-${repaymentModel.feedbackState}`}>
+                        {repaymentModel.feedback}
+                      </p>
+                    </div>
 
-                {renderQuickActions()}
+                    <div className="answer-summary-card">
+                      <span>제출할 답안</span>
+                      <div>
+                        <small>지원구분</small>
+                        <strong>{missionDraft.supportType || "선택 필요"}</strong>
+                      </div>
+                      <div>
+                        <small>월납부액</small>
+                        <strong>{formatAmount(repaymentModel.monthlyPayment)}</strong>
+                      </div>
+                      <div>
+                        <small>상환기간</small>
+                        <strong>{repaymentModel.periodLabel}</strong>
+                      </div>
+                    </div>
 
-                <button className="primary-action" onClick={submitMission} type="button">
-                  <Check size={19} aria-hidden="true" />
-                  제출
-                </button>
+                    {renderQuickActions()}
+
+                    <button className="primary-action" onClick={submitMission} type="button">
+                      <Check size={19} aria-hidden="true" />
+                      제출
+                    </button>
+                  </>
+                )}
               </article>
             )}
 
@@ -1344,6 +2021,50 @@ function App() {
           </section>
         )}
       </main>
+
+      {homeChoiceOpen && (
+        <div className="sheet-backdrop" role="presentation" onClick={() => setHomeChoiceOpen(false)}>
+          <section
+            className="bottom-sheet home-choice-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="이동할 화면 선택"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-head">
+              <div>
+                <span>이동</span>
+                <h2>어디로 이동할까요?</h2>
+              </div>
+              <button className="sheet-close" onClick={() => setHomeChoiceOpen(false)} type="button" title="닫기">
+                <X size={22} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="home-choice-actions">
+              <button
+                onClick={() => {
+                  setHomeChoiceOpen(false);
+                  setScreen("start");
+                }}
+                type="button"
+              >
+                <Home size={18} aria-hidden="true" />
+                시작 화면
+              </button>
+              <button
+                onClick={() => {
+                  setHomeChoiceOpen(false);
+                  setScreen("levelSelect");
+                }}
+                type="button"
+              >
+                <ClipboardList size={18} aria-hidden="true" />
+                레벨 선택
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {scenarioOpen && (
         <div className="sheet-backdrop" role="presentation" onClick={() => setScenarioOpen(false)}>
@@ -1396,7 +2117,7 @@ function App() {
                   type="number"
                   value={calculatorDraft.principal}
                 />
-                <em>만원</em>
+                <em>천원</em>
               </label>
               <label>
                 <span>연 이자율</span>
@@ -1430,15 +2151,15 @@ function App() {
                 <>
                   <div>
                     <span>월납부액</span>
-                    <strong>{formatMoney(calculatorResult.monthlyPayment)}만원</strong>
+                    <strong>{formatAmount(calculatorResult.monthlyPayment)}</strong>
                   </div>
                   <div>
                     <span>총 상환액</span>
-                    <strong>{formatMoney(calculatorResult.totalPayment)}만원</strong>
+                    <strong>{formatAmount(calculatorResult.totalPayment)}</strong>
                   </div>
                   <div>
                     <span>이자 합계</span>
-                    <strong>{formatMoney(calculatorResult.interestPayment)}만원</strong>
+                    <strong>{formatAmount(calculatorResult.interestPayment)}</strong>
                   </div>
                 </>
               ) : (

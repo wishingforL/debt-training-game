@@ -182,13 +182,134 @@ p {
 }
 
 .tutorial-log p {
-  min-height: 64px;
+  min-height: 54px;
   display: flex;
   align-items: center;
 }
 
 .tutorial-actions {
   margin-top: auto;
+}
+
+.tutorial-visual {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 20px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.tutorial-flow {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tutorial-flow div,
+.tutorial-support div,
+.tutorial-intake div,
+.tutorial-intake label,
+.tutorial-clue-step label {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 16px;
+}
+
+.tutorial-flow span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--button-text);
+  background: #000;
+  border-radius: 50%;
+  font-size: 0.75rem;
+}
+
+.tutorial-scenario p {
+  margin: 0;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 16px;
+  font-size: 0.9rem;
+}
+
+.tutorial-clue-step {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  border-radius: 18px;
+}
+
+.tutorial-clue-step label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+}
+
+.tutorial-intake {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tutorial-intake label {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+}
+
+.tutorial-intake strong,
+.tutorial-balance strong {
+  color: var(--ink);
+}
+
+.tutorial-support {
+  grid-template-columns: 1fr;
+}
+
+.tutorial-support div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.tutorial-support span {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tutorial-support small {
+  grid-column: 1 / -1;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.tutorial-balance-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+}
+
+.tutorial-balance p {
+  margin: 0;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 14px;
+  color: var(--ink);
+  line-height: 1.35;
+  text-align: left;
+}
+
+.tutorial-balance p.is-danger {
+  color: #f00000;
 }
 
 .title-block {
@@ -557,19 +678,32 @@ h2 {
   gap: 10px;
 }
 
-.customer-log p {
+.customer-log > p,
+.customer-log > button,
+.customer-log > div {
   display: grid;
   gap: 4px;
+  width: 100%;
+  min-height: 54px;
+  justify-content: start;
   padding: 14px 16px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.84);
+  border: 0;
   border-radius: 22px;
+  text-align: left;
   line-height: 1.44;
   word-break: keep-all;
 }
 
-.customer-log p:nth-child(even) {
+.customer-log > p:nth-child(even),
+.customer-log > button:nth-child(even),
+.customer-log > div:nth-child(even) {
   background: rgba(255, 255, 255, 0.58);
+}
+
+.customer-log > button.is-target {
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
 }
 
 .customer-log p span {
@@ -578,19 +712,199 @@ h2 {
   font-weight: 900;
 }
 
+.customer-log > div > p {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  line-height: 1.42;
+}
+
+.scenario-line-text {
+  font-size: 0.96rem;
+  line-height: 1.64;
+}
+
+.scenario-clue-marker {
+  display: inline;
+  align-items: center;
+  min-height: 0;
+  margin: 0 1px;
+  padding: 0 3px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  word-break: keep-all;
+}
+
+.scenario-clue-marker.is-found {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  margin: 1px 3px;
+  padding: 3px 11px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid #000;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 1000;
+  line-height: 1.24;
+  vertical-align: baseline;
+  white-space: normal;
+}
+
 .screen-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.screen-chips span {
+.screen-chips > span,
+.screen-chips > button {
   padding: 8px 11px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.64);
+  border: 0;
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 900;
+}
+
+.screen-chips button {
+  gap: 6px;
+}
+
+.screen-chips button.is-active {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 0 0 2px #000;
+}
+
+.screen-chips button.is-filtered {
+  box-shadow: inset 0 0 0 2px #000;
+}
+
+.screen-chips button.is-complete {
+  color: var(--button-text);
+  background: #000;
+}
+
+.screen-chips button.is-complete.is-filtered {
+  box-shadow: inset 0 0 0 2px var(--button-text);
+}
+
+.screen-chips small {
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.scenario-find-prompt {
+  margin: -2px 0 0;
+  padding: 10px 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.06);
+  font-size: 0.94rem;
+  font-weight: 1000;
+}
+
+.found-clue-summary {
+  display: grid;
+  gap: 9px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.44);
+  border-radius: 20px;
+}
+
+.found-summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.found-summary-head > span {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 1000;
+}
+
+.found-summary-head button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.66);
+  border: 0;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 1000;
+}
+
+.found-clue-group {
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 17px;
+}
+
+.found-group-head {
+  min-height: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 5px 6px;
+  color: var(--ink);
+  font-weight: 1000;
+}
+
+.found-group-head strong {
+  color: var(--button-text);
+  background: #000;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.74rem;
+}
+
+.found-group-list {
+  display: grid;
+  gap: 4px;
+}
+
+.found-group-list div {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(64px, 0.7fr) 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 12px;
+}
+
+.found-group-list small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.found-group-list em {
+  font-style: normal;
+  font-weight: 1000;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .system-tabs {
@@ -622,11 +936,6 @@ h2 {
   display: grid;
   gap: 14px;
   padding: 18px;
-}
-
-.grouped-entry {
-  display: grid;
-  gap: 10px;
 }
 
 .repayment-tool {
@@ -710,6 +1019,11 @@ h2 {
   color: rgba(255, 214, 0, 0.88);
 }
 
+.support-choice-grid button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .support-display {
   display: flex;
   align-items: baseline;
@@ -729,8 +1043,7 @@ h2 {
 }
 
 .balance-head,
-.balance-values,
-.balance-result div {
+.balance-values {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -742,22 +1055,69 @@ h2 {
 }
 
 .balance-head span,
-.balance-values span,
-.balance-result span {
+.balance-values span {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 900;
 }
 
 .balance-head span,
 .balance-head strong {
   color: var(--ink);
-  font-size: 0.88rem;
+  font-size: 0.96rem;
   font-weight: 1000;
 }
 
 .balance-values span {
   color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 1000;
+}
+
+.living-range-hint {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 22px;
+}
+
+.living-range-hint div {
+  min-height: 42px;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.68);
+  border-radius: 15px;
+}
+
+.living-range-hint div:first-child,
+.living-range-hint p {
+  grid-column: 1 / -1;
+}
+
+.living-range-hint span,
+.living-range-hint small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.living-range-hint strong {
+  font-size: 0.93rem;
+  font-weight: 1000;
+}
+
+.living-range-hint p {
+  margin: 0;
+  padding: 2px 4px 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.35;
 }
 
 .balance-bar {
@@ -792,8 +1152,8 @@ h2 {
   position: absolute;
   top: 50%;
   left: var(--payment-ratio);
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   background: var(--button-text);
   border: 3px solid #000;
   border-radius: 50%;
@@ -808,24 +1168,6 @@ h2 {
   width: 100%;
   opacity: 0;
   cursor: grab;
-}
-
-.balance-result {
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  color: var(--button-text);
-  background: #000;
-  border-radius: 18px;
-}
-
-.balance-result span {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.balance-result strong {
-  color: var(--button-text);
-  font-size: 1rem;
 }
 
 .balance-feedback {
@@ -948,6 +1290,90 @@ h2 {
   font-size: 1.16rem;
 }
 
+.grouped-entry {
+  display: grid;
+  gap: 10px;
+}
+
+.grouped-choice {
+  display: grid;
+  gap: 8px;
+}
+
+.grouped-choice > span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.clue-task {
+  display: grid;
+  gap: 10px;
+}
+
+.clue-task > span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.clue-target-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.clue-target-grid.single-target {
+  grid-template-columns: 1fr;
+}
+
+.clue-target-grid div {
+  min-height: 48px;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 16px;
+}
+
+.clue-target-grid div.is-selected {
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.clue-target-grid small {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.clue-target-grid strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 1000;
+}
+
+.scenario-choice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scenario-choice-list button {
+  min-height: 54px;
+  justify-content: flex-start;
+  padding: 11px 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 17px;
+  text-align: left;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+.scenario-choice-list button.is-selected {
+  color: var(--button-text);
+  background: #000;
+}
+
 .option-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -964,6 +1390,10 @@ h2 {
 .option-grid button.is-selected {
   color: var(--button-text);
   background: #000;
+}
+
+.compact-options button {
+  min-height: 48px;
 }
 
 .entry-list {
@@ -993,7 +1423,9 @@ h2 {
 }
 
 .entry-list strong {
-  max-width: 48%;
+  max-width: 62%;
+  font-size: 0.82rem;
+  text-align: right;
 }
 
 .calc-sheet {
@@ -1022,6 +1454,17 @@ h2 {
   word-break: keep-all;
 }
 
+.calc-sheet dd span,
+.calc-sheet dd strong {
+  display: block;
+}
+
+.calc-sheet dd span {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .select-entry {
   display: grid;
   gap: 8px;
@@ -1034,12 +1477,14 @@ h2 {
   min-height: 50px;
   display: grid;
   place-items: center;
-  padding: 11px 14px;
+  padding: 10px 12px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.72);
   border-radius: 22px;
   text-align: center;
+  font-size: 0.92rem;
   font-weight: 900;
+  line-height: 1.25;
 }
 
 .result-screen {
@@ -1214,6 +1659,24 @@ h2 {
 .calculator-result p {
   text-align: left;
   line-height: 1.45;
+}
+
+.home-choice-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.home-choice-actions button {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.76);
+  border: 0;
+  border-radius: 18px;
+  font-weight: 1000;
 }
 
 .scenario-list p,

@@ -21,6 +21,7 @@ export type IntakeField = {
   type: "number" | "choice" | "boolean";
   unit?: string;
   answer: FieldValue;
+  clue?: string;
   options?: FieldOption[];
 };
 
