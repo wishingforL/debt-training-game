@@ -23,9 +23,13 @@ const ANNUAL_INTEREST_RATE: Record<string, number> = {
 
 export type CalculationResult = {
   income: number;
+  securedPayment: number;
+  repaymentBaseIncome: number;
   householdMembers: number;
   medianIncome: number;
   minimumLivingExpense: number;
+  baseMaxLivingExpense: number;
+  additionalLivingExpense: number;
   maxLivingExpense: number;
   adjustedLivingExpense: number;
   rentExpense: number;
@@ -48,9 +52,48 @@ const round1 = (value: number) => Math.round(value * 10) / 10;
 const ceil1 = (value: number) => Math.ceil(value * 10) / 10;
 const roundWonUnit = (value: number) => Math.round(value);
 
+export function livingExpenseBasisForDependents(dependents: number) {
+  const safeDependents = Math.max(0, Math.min(5, Math.round(dependents)));
+  const householdMembers = Math.max(1, Math.min(6, safeDependents + 1));
+  const medianIncomeWon = MEDIAN_INCOME_2026_WON[householdMembers] ?? MEDIAN_INCOME_2026_WON[6];
+  const medianIncome = round1(medianIncomeWon / 10000);
+  const minimumLivingExpense = round1(medianIncome * 0.4);
+  const maxLivingExpense = roundWonUnit(minimumLivingExpense * 1.5);
+
+  return {
+    dependents: safeDependents,
+    householdMembers,
+    maxLivingExpense,
+    medianIncome,
+    minimumLivingExpense,
+  };
+}
+
 function numberField(fields: LevelData["fields"], key: string) {
   const value = fields.find((field) => field.key === key)?.answer;
   return typeof value === "number" ? value : 0;
+}
+
+function stringField(fields: LevelData["fields"], key: string) {
+  const value = fields.find((field) => field.key === key)?.answer;
+  return typeof value === "string" ? value : "";
+}
+
+function additionalLivingExpenseForLevel(level: LevelData) {
+  if (level.level < 5) return 0;
+
+  const scenarioText = level.scenario.join(" ");
+  const isSeoul = stringField(level.fields, "residenceArea") === "서울" || scenarioText.includes("서울");
+  const hasCollegeChild = scenarioText.includes("대학생");
+  const medicalExpense = numberField(level.fields, "medicalExpense");
+  const isSingleHousehold = numberField(level.fields, "dependents") === 0 && scenarioText.includes("미혼");
+
+  return round1(
+    (isSeoul ? 60 : 0) +
+    (hasCollegeChild ? 30 : 0) +
+    medicalExpense +
+    (isSingleHousehold ? 20 : 0),
+  );
 }
 
 function supportTypeFor(overdueDays: number) {
@@ -80,12 +123,13 @@ export function formatMoney(value: number) {
 export function calculateLevel(level: LevelData): CalculationResult {
   const income = numberField(level.fields, "income");
   const dependents = numberField(level.fields, "dependents");
-  const householdMembers = Math.max(1, Math.min(6, dependents + 1));
-  const medianIncomeWon = MEDIAN_INCOME_2026_WON[householdMembers] ?? MEDIAN_INCOME_2026_WON[6];
-  const medianIncome = round1(medianIncomeWon / 10000);
-  const minimumLivingExpense = round1(medianIncome * 0.4);
-  const maxLivingExpense = round1(minimumLivingExpense * 1.5);
+  const { householdMembers, medianIncome, minimumLivingExpense, maxLivingExpense: baseMaxLivingExpense } =
+    livingExpenseBasisForDependents(dependents);
+  const additionalLivingExpense = additionalLivingExpenseForLevel(level);
+  const maxLivingExpense = round1(baseMaxLivingExpense + additionalLivingExpense);
   const rentExpense = numberField(level.fields, "monthlyRent");
+  const securedPayment = numberField(level.fields, "securedPayment");
+  const repaymentBaseIncome = Math.max(0, round1(income - securedPayment));
   const targetDebt = numberField(level.fields, "unsecuredDebt") || numberField(level.fields, "debt");
   const overdueDays = numberField(level.fields, "overdueDays");
   const supportType = supportTypeFor(overdueDays);
@@ -93,7 +137,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
   const monthlyInterestRate = annualInterestRate / 12;
   const repaymentMethod = annualInterestRate > 0 ? "원리금균등" : "원금균등";
   const maxRepaymentMonths = MAX_REPAYMENT_MONTHS[supportType];
-  const rawDisposableIncome = Math.max(0, round1(income - maxLivingExpense));
+  const rawDisposableIncome = Math.max(0, round1(repaymentBaseIncome - maxLivingExpense));
   const rawRepaymentMonths = repaymentMonthsForPayment(targetDebt, rawDisposableIncome, monthlyInterestRate);
   const cappedByMaxPeriod = !rawRepaymentMonths || rawRepaymentMonths > maxRepaymentMonths;
   const rawMonthlyPayment = roundWonUnit(rawDisposableIncome);
@@ -101,9 +145,13 @@ export function calculateLevel(level: LevelData): CalculationResult {
   if (!cappedByMaxPeriod) {
     return {
       income,
+      securedPayment,
+      repaymentBaseIncome,
       householdMembers,
       medianIncome,
       minimumLivingExpense,
+      baseMaxLivingExpense,
+      additionalLivingExpense,
       maxLivingExpense,
       adjustedLivingExpense: maxLivingExpense,
       rentExpense,
@@ -128,8 +176,8 @@ export function calculateLevel(level: LevelData): CalculationResult {
   }
 
   const monthlyPayment = ceil1(paymentForMonths(targetDebt, maxRepaymentMonths, monthlyInterestRate));
-  const adjustedLivingExpense = round1(Math.max(0, Math.min(maxLivingExpense, income - monthlyPayment)));
-  const disposableIncome = round1(Math.max(0, income - adjustedLivingExpense));
+  const adjustedLivingExpense = round1(Math.max(0, Math.min(maxLivingExpense, repaymentBaseIncome - monthlyPayment)));
+  const disposableIncome = round1(Math.max(0, repaymentBaseIncome - adjustedLivingExpense));
   const repaymentPeriod = Math.min(
     maxRepaymentMonths,
     repaymentMonthsForPayment(targetDebt, Math.max(disposableIncome, 0.1), monthlyInterestRate) ?? maxRepaymentMonths,
@@ -138,9 +186,13 @@ export function calculateLevel(level: LevelData): CalculationResult {
 
   return {
     income,
+    securedPayment,
+    repaymentBaseIncome,
     householdMembers,
     medianIncome,
     minimumLivingExpense,
+    baseMaxLivingExpense,
+    additionalLivingExpense,
     maxLivingExpense,
     adjustedLivingExpense,
     rentExpense,
