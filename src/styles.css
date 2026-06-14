@@ -14,7 +14,7 @@
   --panel: rgba(255, 255, 255, 0.62);
   --white: #fff;
   --button-text: var(--bg);
-  --browser-bottom-buffer: 104px;
+  --browser-bottom-buffer: 196px;
 }
 
 * {
@@ -134,6 +134,13 @@ p {
     max(22px, env(safe-area-inset-top))
     20px
     calc(max(22px, env(safe-area-inset-bottom)) + var(--browser-bottom-buffer));
+}
+
+.tutorial-screen,
+.game-screen,
+.result-screen {
+  min-height: calc(100dvh + var(--browser-bottom-buffer));
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--browser-bottom-buffer));
 }
 
 .start-screen,
