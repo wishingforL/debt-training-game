@@ -425,9 +425,13 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
   const livingLines =
     level.level >= 5
       ? [
-          calculation.additionalLivingExpense > 0
-            ? `최대 생활비: 기본 ${formatAmount(calculation.baseMaxLivingExpense)} + 추가인정 ${formatAmount(calculation.additionalLivingExpense)} = ${formatAmount(calculation.maxLivingExpense)}`
-            : `최대 생활비: ${formatAmount(calculation.maxLivingExpense)}`,
+          `MAX 생활비: 최저생계비(${calculation.householdMembers}인 가구) x 150% = ${formatAmount(calculation.maxLivingExpense)}`,
+          ...(calculation.additionalLivingExpense > 0
+            ? [
+                `추가인정 생활비: ${formatAmount(calculation.additionalLivingExpense)}`,
+                `반영 생활비: ${formatAmount(calculation.maxLivingExpense)} + ${formatAmount(calculation.additionalLivingExpense)} = ${formatAmount(calculation.recognizedMaxLivingExpense)}`,
+              ]
+            : []),
         ]
       : [];
 
@@ -1686,6 +1690,14 @@ function App() {
     resetLevelState(levelIndex + 1);
   }
 
+  function showCalculationResult() {
+    setScorePopupOpen(false);
+    setPhase("calculation");
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   const tutorialPage = TUTORIAL_PAGES[tutorialIndex] ?? TUTORIAL_PAGES[0];
   const tutorialProgress = ((tutorialIndex + 1) / TUTORIAL_PAGES.length) * 100;
   const TutorialIcon = [Smartphone, ClipboardList, HelpCircle, Calculator][tutorialIndex] ?? ClipboardList;
@@ -2085,11 +2097,15 @@ function App() {
                   <div>
                     <dt>최대 생활비</dt>
                     <dd>
-                      {calculation.additionalLivingExpense > 0
-                        ? `최저생계비(${calculation.householdMembers}인 가구) x 150% ${formatAmount(calculation.baseMaxLivingExpense)} + 추가인정 ${formatAmount(calculation.additionalLivingExpense)} = ${formatAmount(calculation.maxLivingExpense)}`
-                        : `최저생계비(${calculation.householdMembers}인 가구) x 150% = ${formatAmount(calculation.maxLivingExpense)}`}
+                      {`최저생계비(${calculation.householdMembers}인 가구) x 150% = ${formatAmount(calculation.maxLivingExpense)}`}
                     </dd>
                   </div>
+                  {calculation.additionalLivingExpense > 0 && (
+                    <div>
+                      <dt>추가인정 생활비</dt>
+                      <dd>{formatAmount(calculation.additionalLivingExpense)}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt>생활비</dt>
                     <dd>{formatAmount(calculation.adjustedLivingExpense)}</dd>
@@ -2226,7 +2242,7 @@ function App() {
                       </div>
                       <div>
                         <small>MAX 생활비</small>
-                        <strong>{formatAmount(recognizedMaxLivingExpense)}</strong>
+                        <strong>{formatAmount(livingBasis.maxLivingExpense)}</strong>
                       </div>
                       {extraLivingItems.length > 0 && (
                         <div className="additional-living-expenses">
@@ -2565,9 +2581,9 @@ function App() {
               </div>
             </div>
 
-            <button className="primary-action" onClick={() => finishLevel(levelIndex === LEVELS.length - 1 ? "result" : "next")} type="button">
+            <button className="primary-action" onClick={showCalculationResult} type="button">
               <ChevronRight size={19} aria-hidden="true" />
-              {levelIndex === LEVELS.length - 1 ? "결과 보기" : "다음 문항"}
+              결과 보기
             </button>
           </section>
         </div>

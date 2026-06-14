@@ -14,6 +14,7 @@
   --panel: rgba(255, 255, 255, 0.62);
   --white: #fff;
   --button-text: var(--bg);
+  --browser-bottom-buffer: 104px;
 }
 
 * {
@@ -129,7 +130,10 @@ p {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: max(22px, env(safe-area-inset-top)) 20px max(22px, env(safe-area-inset-bottom));
+  padding:
+    max(22px, env(safe-area-inset-top))
+    20px
+    calc(max(22px, env(safe-area-inset-bottom)) + var(--browser-bottom-buffer));
 }
 
 .start-screen,
@@ -2118,7 +2122,10 @@ h2 {
   .game-screen,
   .result-screen {
     gap: 12px;
-    padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+    padding:
+      max(16px, env(safe-area-inset-top))
+      14px
+      calc(max(16px, env(safe-area-inset-bottom)) + var(--browser-bottom-buffer));
   }
 
   h1 {

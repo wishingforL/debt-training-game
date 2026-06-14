@@ -31,6 +31,7 @@ export type CalculationResult = {
   baseMaxLivingExpense: number;
   additionalLivingExpense: number;
   maxLivingExpense: number;
+  recognizedMaxLivingExpense: number;
   adjustedLivingExpense: number;
   rentExpense: number;
   targetDebt: number;
@@ -126,7 +127,8 @@ export function calculateLevel(level: LevelData): CalculationResult {
   const { householdMembers, medianIncome, minimumLivingExpense, maxLivingExpense: baseMaxLivingExpense } =
     livingExpenseBasisForDependents(dependents);
   const additionalLivingExpense = additionalLivingExpenseForLevel(level);
-  const maxLivingExpense = round1(baseMaxLivingExpense + additionalLivingExpense);
+  const maxLivingExpense = baseMaxLivingExpense;
+  const recognizedMaxLivingExpense = round1(maxLivingExpense + additionalLivingExpense);
   const rentExpense = numberField(level.fields, "monthlyRent");
   const securedPayment = numberField(level.fields, "securedPayment");
   const repaymentBaseIncome = Math.max(0, round1(income - securedPayment));
@@ -137,7 +139,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
   const monthlyInterestRate = annualInterestRate / 12;
   const repaymentMethod = annualInterestRate > 0 ? "원리금균등" : "원금균등";
   const maxRepaymentMonths = MAX_REPAYMENT_MONTHS[supportType];
-  const rawDisposableIncome = Math.max(0, round1(repaymentBaseIncome - maxLivingExpense));
+  const rawDisposableIncome = Math.max(0, round1(repaymentBaseIncome - recognizedMaxLivingExpense));
   const rawRepaymentMonths = repaymentMonthsForPayment(targetDebt, rawDisposableIncome, monthlyInterestRate);
   const cappedByMaxPeriod = !rawRepaymentMonths || rawRepaymentMonths > maxRepaymentMonths;
   const rawMonthlyPayment = roundWonUnit(rawDisposableIncome);
@@ -153,7 +155,8 @@ export function calculateLevel(level: LevelData): CalculationResult {
       baseMaxLivingExpense,
       additionalLivingExpense,
       maxLivingExpense,
-      adjustedLivingExpense: maxLivingExpense,
+      recognizedMaxLivingExpense,
+      adjustedLivingExpense: recognizedMaxLivingExpense,
       rentExpense,
       targetDebt,
       supportType,
@@ -176,7 +179,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
   }
 
   const monthlyPayment = ceil1(paymentForMonths(targetDebt, maxRepaymentMonths, monthlyInterestRate));
-  const adjustedLivingExpense = round1(Math.max(0, Math.min(maxLivingExpense, repaymentBaseIncome - monthlyPayment)));
+  const adjustedLivingExpense = round1(Math.max(0, Math.min(recognizedMaxLivingExpense, repaymentBaseIncome - monthlyPayment)));
   const disposableIncome = round1(Math.max(0, repaymentBaseIncome - adjustedLivingExpense));
   const repaymentPeriod = Math.min(
     maxRepaymentMonths,
@@ -194,6 +197,7 @@ export function calculateLevel(level: LevelData): CalculationResult {
     baseMaxLivingExpense,
     additionalLivingExpense,
     maxLivingExpense,
+    recognizedMaxLivingExpense,
     adjustedLivingExpense,
     rentExpense,
     targetDebt,
