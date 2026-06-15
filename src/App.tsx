@@ -296,9 +296,30 @@ function isCorrectValue(field: IntakeField, value: FieldValue | undefined) {
   return value === field.answer;
 }
 
-function nextOpenField(level: LevelData, solved: Record<string, boolean>, fallback: number) {
-  const next = level.fields.findIndex((field) => !solved[field.key]);
-  return next >= 0 ? next : Math.min(fallback, level.fields.length - 1);
+function fieldsInScenarioOrder(level: LevelData) {
+  const ordered: IntakeField[] = [];
+
+  level.scenario.forEach((line) => {
+    level.fields
+      .filter((field) => fieldClue(field) === line)
+      .forEach((field) => {
+        if (!ordered.some((item) => item.key === field.key)) ordered.push(field);
+      });
+  });
+
+  level.fields.forEach((field) => {
+    if (!ordered.some((item) => item.key === field.key)) ordered.push(field);
+  });
+
+  return ordered;
+}
+
+function nextOpenFieldInOrder(level: LevelData, solved: Record<string, boolean>, orderedFields: IntakeField[], fallback: number) {
+  const nextField = orderedFields.find((field) => !solved[field.key]);
+  if (!nextField) return Math.min(fallback, level.fields.length - 1);
+
+  const nextIndex = level.fields.findIndex((field) => field.key === nextField.key);
+  return nextIndex >= 0 ? nextIndex : Math.min(fallback, level.fields.length - 1);
 }
 
 function fieldValueLabel(field: IntakeField, value: FieldValue = field.answer) {
@@ -723,16 +744,13 @@ function App() {
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
   const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
   const phaseProgressWidth = ((levelIndex + phaseStep / 4) / LEVELS.length) * 100;
+  const scenarioOrderedFields = useMemo(() => fieldsInScenarioOrder(level), [level]);
 
   const orderedScreenNames = useMemo(() => {
     const ordered: string[] = [];
 
-    level.scenario.forEach((line) => {
-      level.fields
-        .filter((field) => fieldClue(field) === line)
-        .forEach((field) => {
-          if (!ordered.includes(field.screen)) ordered.push(field.screen);
-        });
+    scenarioOrderedFields.forEach((field) => {
+      if (!ordered.includes(field.screen)) ordered.push(field.screen);
     });
 
     level.systemScreens.forEach((screenName) => {
@@ -740,7 +758,7 @@ function App() {
     });
 
     return ordered;
-  }, [level]);
+  }, [level, scenarioOrderedFields]);
 
   const screenProgress = useMemo(() => {
     return orderedScreenNames.map((screenName) => {
@@ -756,9 +774,10 @@ function App() {
   const currentStarCount = Math.max(1, Math.min(5, Math.ceil((currentLevelScore / maxLevelScore) * 5)));
 
   const activeScenarioTargets = useMemo(() => {
-    const currentFields = groupedScreenFields.length > 0 ? groupedScreenFields : [activeField];
+    const currentClue = activeField ? fieldClue(activeField) : "";
+    const currentFields = scenarioOrderedFields.filter((field) => fieldClue(field) === currentClue);
     return currentFields.filter(Boolean);
-  }, [activeField, groupedScreenFields]);
+  }, [activeField, scenarioOrderedFields]);
 
   const screenClueGroups = useMemo(() => {
     return orderedScreenNames
@@ -777,14 +796,14 @@ function App() {
   const focusedClueGroups = useMemo(() => {
     if (clueSummaryGroups.length === 0) return [];
 
-    const firstUnsolvedScreen = level.fields.find((field) => !solved[field.key])?.screen;
+    const firstUnsolvedScreen = scenarioOrderedFields.find((field) => !solved[field.key])?.screen;
     const preferredGroup =
       clueSummaryGroups.find((group) => group.screenName === firstUnsolvedScreen) ??
       clueSummaryGroups.find((group) => group.screenName === "소득") ??
       clueSummaryGroups[0];
 
     return preferredGroup ? [preferredGroup] : [];
-  }, [clueSummaryGroups, level, solved]);
+  }, [clueSummaryGroups, scenarioOrderedFields, solved]);
 
   const visibleClueGroups = useMemo(() => {
     if (showAllClues) return clueSummaryGroups;
@@ -804,8 +823,9 @@ function App() {
 
   const entryItems = useMemo(() => {
     const groupedScreens = new Set<string>();
-    return level.fields.flatMap((field, index) => {
+    return scenarioOrderedFields.flatMap((field) => {
       const screenFields = level.fields.filter((item) => item.screen === field.screen);
+      const index = level.fields.findIndex((item) => item.key === field.key);
 
       if (screenFields.length > 1) {
         if (groupedScreens.has(field.screen)) return [];
@@ -815,7 +835,7 @@ function App() {
 
       return [{ key: field.key, label: field.label, fields: [field], index, isGroup: false }];
     });
-  }, [level]);
+  }, [level, scenarioOrderedFields]);
 
   function entryStatusLabel(item: { fields: IntakeField[]; isGroup: boolean }) {
     const doneFields = item.fields.filter((field) => solved[field.key]);
@@ -1014,22 +1034,6 @@ function App() {
     return lineFields.length > 0 && lineFields.every((field) => solved[field.key]);
   }
 
-  function focusScreen(screenName: string) {
-    const targetIndex = level.fields.findIndex((field) => field.screen === screenName && !solved[field.key]);
-    const fallbackIndex = level.fields.findIndex((field) => field.screen === screenName);
-
-    if (targetIndex >= 0) {
-      prepareField(targetIndex);
-      return;
-    }
-
-    if (fallbackIndex >= 0) prepareField(fallbackIndex);
-  }
-
-  function handleScenarioFieldTap(field: IntakeField) {
-    handleScenarioFieldsTap([field]);
-  }
-
   function handleScenarioFieldsTap(fields: IntakeField[]) {
     const candidates = activeScenarioTargets.filter((field) => !solved[field.key]);
 
@@ -1067,7 +1071,7 @@ function App() {
     setWrongAttempts(nextAttempts);
     setFeedback(`${targetFields.map((field) => field.label).join(" · ")} 단서 확인 완료`);
 
-    const nextIndex = nextOpenField(level, nextSolved, activeFieldIndex + 1);
+    const nextIndex = nextOpenFieldInOrder(level, nextSolved, scenarioOrderedFields, activeFieldIndex + 1);
     setActiveFieldIndex(nextIndex);
     setDraftValue("");
     setGroupDraft({});
@@ -1523,7 +1527,7 @@ function App() {
       if (usesGroupedScreen) {
         const lastIndex = Math.max(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
         if (lastIndex < level.fields.length - 1) {
-          prepareField(lastIndex + 1);
+          prepareField(nextOpenFieldInOrder(level, nextSolved, scenarioOrderedFields, lastIndex + 1));
           return;
         }
 
@@ -1532,7 +1536,7 @@ function App() {
       }
 
       if (activeFieldIndex < level.fields.length - 1) {
-        prepareField(activeFieldIndex + 1);
+        prepareField(nextOpenFieldInOrder(level, nextSolved, scenarioOrderedFields, activeFieldIndex + 1));
         return;
       }
 
@@ -1670,7 +1674,7 @@ function App() {
     }
 
     const lastGroupIndex = Math.max(...groupedScreenFields.map((field) => level.fields.findIndex((item) => item.key === field.key)));
-    const nextIndex = nextOpenField(level, nextSolved, lastGroupIndex + 1);
+    const nextIndex = nextOpenFieldInOrder(level, nextSolved, scenarioOrderedFields, lastGroupIndex + 1);
     setTimeout(() => prepareField(nextIndex), 280);
   }
 
@@ -1711,7 +1715,7 @@ function App() {
       return;
     }
 
-    const nextIndex = nextOpenField(level, nextSolved, activeFieldIndex + 1);
+    const nextIndex = nextOpenFieldInOrder(level, nextSolved, scenarioOrderedFields, activeFieldIndex + 1);
     setTimeout(() => prepareField(nextIndex), 280);
   }
 
@@ -2064,7 +2068,6 @@ function App() {
                       } ${clueFilterScreen === item.screenName ? "is-filtered" : ""}`}
                       key={item.screenName}
                       onClick={() => {
-                        focusScreen(item.screenName);
                         setShowAllClues(false);
                         setClueFilterScreen(item.screenName);
                       }}
