@@ -27,10 +27,20 @@ import type { FieldValue, IntakeField, LevelData, LevelResult, StoredStats } fro
 import startHero from "../assets/start-hero.jpg";
 
 const STORAGE_KEY = "rookie-debt-adjustment-game-v1";
-const PAYMENT_SNAP_TOLERANCE = 1;
+const PAYMENT_SNAP_TOLERANCE = 0.25;
 const MONEY_INPUT_SCALE = 10;
-const COMPRESSED_LIVING_EXPENSE_LIMIT = 60;
-const COMPRESSED_LIVING_EXPENSE_RATIO = 1 / 3;
+const PAYMENT_SLIDER_MAX = 100;
+const HIGH_INCOME_PAYMENT_THRESHOLD = 400;
+const DEFAULT_PAYMENT_FOCUS_RANGE_RATIO = 0.1;
+const DEFAULT_PAYMENT_FOCUS_SLIDER_SHARE = 10;
+const HIGH_INCOME_PAYMENT_FOCUS_RANGE_RATIO = 0.05;
+const HIGH_INCOME_PAYMENT_FOCUS_SLIDER_SHARE = 15;
+const LOW_PAYMENT_COMPACT_LIMIT = 10;
+const LOW_LIVING_EXPENSE_RATIO = 0.3;
+const LOW_PAYMENT_SLIDER_WEIGHT = 1.5;
+const BEFORE_FOCUS_SLIDER_WEIGHT = 44;
+const AFTER_FOCUS_SLIDER_WEIGHT = 42.5;
+const HIGH_PAYMENT_SLIDER_WEIGHT = 2;
 const MIN_LIVING_EXPENSE_RATIO = 0.9;
 const WRONG_GROUP_CLUE_KEY = "__wrongClue";
 const MONEY_FIELD_KEYS = new Set([
@@ -180,34 +190,91 @@ function toInternalFieldValue(field: IntakeField, value: number) {
   return isMoneyField(field) ? round1(value / MONEY_INPUT_SCALE) : value;
 }
 
-function livingExpenseToSlider(livingExpense: number) {
-  const safeLivingExpense = Math.max(0, livingExpense);
-  if (safeLivingExpense <= COMPRESSED_LIVING_EXPENSE_LIMIT) {
-    return safeLivingExpense * COMPRESSED_LIVING_EXPENSE_RATIO;
+type PaymentSliderSegment = {
+  paymentEnd: number;
+  paymentStart: number;
+  sliderEnd: number;
+  sliderStart: number;
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildPaymentSliderSegments(income: number, targetPayment: number) {
+  const safeIncome = Math.max(0, income);
+  if (safeIncome <= 0) {
+    return [{ paymentStart: 0, paymentEnd: 0, sliderStart: 0, sliderEnd: PAYMENT_SLIDER_MAX }];
   }
-  return (
-    COMPRESSED_LIVING_EXPENSE_LIMIT * COMPRESSED_LIVING_EXPENSE_RATIO +
-    safeLivingExpense - COMPRESSED_LIVING_EXPENSE_LIMIT
+
+  const safeTarget = clamp(targetPayment, 0, safeIncome);
+  const isHighIncome = safeIncome >= HIGH_INCOME_PAYMENT_THRESHOLD;
+  const focusRangeRatio = isHighIncome ? HIGH_INCOME_PAYMENT_FOCUS_RANGE_RATIO : DEFAULT_PAYMENT_FOCUS_RANGE_RATIO;
+  const focusSliderShare = isHighIncome ? HIGH_INCOME_PAYMENT_FOCUS_SLIDER_SHARE : DEFAULT_PAYMENT_FOCUS_SLIDER_SHARE;
+  const focusStart = clamp(safeTarget * (1 - focusRangeRatio), 0, safeIncome);
+  const focusEnd = Math.max(focusStart, clamp(safeTarget * (1 + focusRangeRatio), 0, safeIncome));
+  const lowPaymentEnd = Math.min(LOW_PAYMENT_COMPACT_LIMIT, focusStart);
+  const targetLivingExpense = Math.max(0, safeIncome - safeTarget);
+  const highPaymentStart = Math.max(
+    focusEnd,
+    clamp(safeIncome - targetLivingExpense * LOW_LIVING_EXPENSE_RATIO, 0, safeIncome),
   );
+  const rawSegments = [
+    { paymentStart: 0, paymentEnd: lowPaymentEnd, sliderWeight: LOW_PAYMENT_SLIDER_WEIGHT, isFocus: false },
+    { paymentStart: lowPaymentEnd, paymentEnd: focusStart, sliderWeight: BEFORE_FOCUS_SLIDER_WEIGHT, isFocus: false },
+    { paymentStart: focusStart, paymentEnd: focusEnd, sliderWeight: focusSliderShare, isFocus: true },
+    { paymentStart: focusEnd, paymentEnd: highPaymentStart, sliderWeight: AFTER_FOCUS_SLIDER_WEIGHT, isFocus: false },
+    { paymentStart: highPaymentStart, paymentEnd: safeIncome, sliderWeight: HIGH_PAYMENT_SLIDER_WEIGHT, isFocus: false },
+  ].filter((segment) => segment.paymentEnd - segment.paymentStart > 0.001);
+  const hasFocus = rawSegments.some((segment) => segment.isFocus);
+  const otherWeightTotal = rawSegments
+    .filter((segment) => !segment.isFocus)
+    .reduce((sum, segment) => sum + segment.sliderWeight, 0);
+  const totalWeight = rawSegments.reduce((sum, segment) => sum + segment.sliderWeight, 0);
+  let sliderCursor = 0;
+
+  return rawSegments.map<PaymentSliderSegment>((segment) => {
+    const sliderWeight =
+      hasFocus && otherWeightTotal > 0
+        ? segment.isFocus
+          ? focusSliderShare
+          : (segment.sliderWeight / otherWeightTotal) * (PAYMENT_SLIDER_MAX - focusSliderShare)
+        : (segment.sliderWeight / totalWeight) * PAYMENT_SLIDER_MAX;
+    const sliderStart = sliderCursor;
+    const sliderEnd = sliderCursor + sliderWeight;
+    sliderCursor = sliderEnd;
+
+    return {
+      paymentStart: segment.paymentStart,
+      paymentEnd: segment.paymentEnd,
+      sliderStart,
+      sliderEnd,
+    };
+  });
 }
 
-function sliderMaxForIncome(income: number) {
-  return livingExpenseToSlider(income);
+function sliderMaxForIncome() {
+  return PAYMENT_SLIDER_MAX;
 }
 
-function paymentToSlider(monthlyPayment: number, income: number) {
-  return sliderMaxForIncome(income) - livingExpenseToSlider(Math.max(0, income - monthlyPayment));
+function paymentToSlider(monthlyPayment: number, income: number, targetPayment: number) {
+  const safePayment = clamp(monthlyPayment, 0, Math.max(0, income));
+  const segments = buildPaymentSliderSegments(income, targetPayment);
+  const segment = segments.find((item) => safePayment <= item.paymentEnd) ?? segments[segments.length - 1];
+  if (!segment || segment.paymentEnd === segment.paymentStart) return 0;
+
+  const ratio = (safePayment - segment.paymentStart) / (segment.paymentEnd - segment.paymentStart);
+  return clamp(segment.sliderStart + ratio * (segment.sliderEnd - segment.sliderStart), 0, PAYMENT_SLIDER_MAX);
 }
 
-function sliderToPayment(sliderValue: number, income: number) {
-  const maxSlider = sliderMaxForIncome(income);
-  const livingCoord = Math.max(0, maxSlider - sliderValue);
-  const compressedLimit = COMPRESSED_LIVING_EXPENSE_LIMIT * COMPRESSED_LIVING_EXPENSE_RATIO;
-  const livingExpense =
-    livingCoord <= compressedLimit
-      ? livingCoord / COMPRESSED_LIVING_EXPENSE_RATIO
-      : COMPRESSED_LIVING_EXPENSE_LIMIT + livingCoord - compressedLimit;
-  return round1(Math.max(0, Math.min(income, income - livingExpense)));
+function sliderToPayment(sliderValue: number, income: number, targetPayment: number) {
+  const safeSliderValue = clamp(sliderValue, 0, PAYMENT_SLIDER_MAX);
+  const segments = buildPaymentSliderSegments(income, targetPayment);
+  const segment = segments.find((item) => safeSliderValue <= item.sliderEnd) ?? segments[segments.length - 1];
+  if (!segment || segment.sliderEnd === segment.sliderStart) return 0;
+
+  const ratio = (safeSliderValue - segment.sliderStart) / (segment.sliderEnd - segment.sliderStart);
+  return round1(segment.paymentStart + ratio * (segment.paymentEnd - segment.paymentStart));
 }
 
 function loadStats(): StoredStats {
@@ -446,9 +513,9 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
     ...livingLines,
     `${incomeLabel} ${formatAmount(calculation.repaymentBaseIncome)} - 생활비 ${formatAmount(calculation.adjustedLivingExpense)} = 월납부액 ${formatAmount(calculation.monthlyPayment)}`,
     "",
-    "3. 상환기간 계산 기준",
+    "3. 상환기간: 대상채무, 월납부액, 상환조건으로 계산",
     `${calculation.supportType}: ${supportMeta.detail}`,
-    `대상채무 ${formatAmount(calculation.targetDebt)} 기준으로 ${calculation.repaymentPeriod}개월입니다.`,
+    repaymentPeriodFormulaText(calculation),
   ].join("\n");
 }
 
@@ -459,6 +526,16 @@ function missionAnswerText(calculation: CalculationResult) {
     `상환기간: ${calculation.mission.repaymentPeriod}개월`,
     `생활비: ${formatAmount(calculation.adjustedLivingExpense)}`,
   ].join("\n");
+}
+
+function repaymentPeriodFormulaText(calculation: CalculationResult) {
+  const capLabel = calculation.cappedByMaxPeriod ? `, 최대 ${calculation.maxRepaymentMonths}개월 적용` : "";
+
+  if (calculation.annualInterestRate > 0) {
+    return `${formatAmount(calculation.targetDebt)}을 월납부액 ${formatAmount(calculation.monthlyPayment)}으로 납부하고, 연 ${formatMoney(calculation.annualInterestRate * 100)}% ${calculation.repaymentMethod} 조건 적용 = ${calculation.repaymentPeriod}개월${capLabel}`;
+  }
+
+  return `${formatAmount(calculation.targetDebt)}을 월납부액 ${formatAmount(calculation.monthlyPayment)}으로 나누어 계산 = ${calculation.repaymentPeriod}개월${capLabel}`;
 }
 
 function supportOptionMeta(option: string) {
@@ -577,6 +654,10 @@ function App() {
     const roundedRequiredPayment = Math.round(
       paymentForMonths(calculation.targetDebt, selectedTerms.maxRepaymentMonths, monthlyInterestRate),
     );
+    const targetPayment =
+      selectedSupportType === calculation.mission.supportType
+        ? calculation.mission.monthlyPayment
+        : roundedRequiredPayment;
     const acceptsRoundedMaxPeriod =
       rawRepaymentMonths !== null &&
       rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
@@ -598,8 +679,8 @@ function App() {
     const feedbackCannotCalculate = rawRepaymentMonths === null
       ? "월납부액이 낮아 상환기간 계산이 어렵습니다. 월납부액을 늘려주세요."
       : "최대 상환기간 안에 들어오지 않습니다. 월납부액을 늘려주세요.";
-    const sliderMax = sliderMaxForIncome(calculation.repaymentBaseIncome);
-    const sliderValue = paymentToSlider(monthlyPayment, calculation.repaymentBaseIncome);
+    const sliderMax = sliderMaxForIncome();
+    const sliderValue = paymentToSlider(monthlyPayment, calculation.repaymentBaseIncome, targetPayment);
     const paymentRatio = sliderMax > 0 ? (sliderValue / sliderMax) * 100 : 0;
     const minimumLivingExpenseLimit = livingBasis.minimumLivingExpense * MIN_LIVING_EXPENSE_RATIO;
     const feedbackState =
@@ -631,7 +712,7 @@ function App() {
       repaymentPeriod,
       sliderMax,
       sliderValue,
-      targetPayment: roundedRequiredPayment,
+      targetPayment,
     };
   }, [calculation, livingBasis, missionDraft.supportType, recognizedMaxLivingExpense, repaymentDraft]);
   const activeField = level.fields[activeFieldIndex];
@@ -869,9 +950,11 @@ function App() {
         </button>
         <button
           onClick={() => {
-            if (phase === "mission") showMissionAssist(wrongAttempts.mission ?? 0);
-            else if (phase === "intake") showFieldAssist(activeField, activeAttemptCount);
-            else {
+            if (phase === "mission") {
+              showMissionAssist(missionPage === 0 ? wrongAttempts.supportType ?? 0 : wrongAttempts.mission ?? 0);
+            } else if (phase === "intake") {
+              showFieldAssist(activeField, activeAttemptCount);
+            } else {
               openAssist({
                 title: "답안 확인",
                 body: "최종미션을 제출한 뒤 계산 결과를 확인하는 화면입니다. 지원구분, 생활비, 월납부액, 상환기간 산식을 함께 봅니다.",
@@ -1292,7 +1375,7 @@ function App() {
   }
 
   function updateRepaymentDraft(value: number) {
-    const paymentValue = Math.round(sliderToPayment(value, calculation.repaymentBaseIncome));
+    const paymentValue = Math.round(sliderToPayment(value, calculation.repaymentBaseIncome, repaymentModel.targetPayment));
     const snappedValue =
       Math.abs(paymentValue - repaymentModel.targetPayment) <= PAYMENT_SNAP_TOLERANCE
         ? repaymentModel.targetPayment
@@ -1870,7 +1953,17 @@ function App() {
                   <section className="level-node level-group-node" key={group.level}>
                     <div className="level-group-title">
                       <span>LEVEL {group.level}</span>
-                      <strong>{group.title}</strong>
+                      <strong>
+                        {group.title === "추가인정 생활비" ? (
+                          <>
+                            추가인정
+                            <br />
+                            생활비
+                          </>
+                        ) : (
+                          group.title
+                        )}
+                      </strong>
                     </div>
                     <div className="level-case-grid">
                       {group.cases.map(({ item, index }, caseIndex) => {
@@ -2122,10 +2215,8 @@ function App() {
                   <div>
                     <dt>상환기간</dt>
                     <dd>
-                      {calculation.annualInterestRate > 0
-                        ? `${formatAmount(calculation.targetDebt)}을 연 ${formatMoney(calculation.annualInterestRate * 100)}% ${calculation.repaymentMethod} 조건으로 계산 = ${calculation.repaymentPeriod}개월`
-                        : `${formatAmountNumber(calculation.targetDebt)} / ${formatAmountNumber(calculation.monthlyPayment)} = ${calculation.repaymentPeriod}개월`}
-                      {calculation.cappedByMaxPeriod ? `, 최대 ${calculation.maxRepaymentMonths}개월 적용` : ""}
+                      <span>{calculation.annualInterestRate > 0 ? "대상채무 · 월납부액 · 이자율" : "대상채무 / 월납부액"}</span>
+                      <strong>{repaymentPeriodFormulaText(calculation)}</strong>
                     </dd>
                   </div>
                   <div>
@@ -2340,11 +2431,11 @@ function App() {
             </div>
             <span className="eyebrow">교육 클리어</span>
             <h1>{formatNumber(sessionScore)}점</h1>
-            <p>주거, 가족, 소득, 재산, 채무현황, 급여가압류 화면을 모두 통과했습니다.</p>
+            <p>소득, 가족, 주거, 재산, 채무현황, 추가인정 생활비 흐름을 모두 확인했습니다.</p>
 
             <div className="result-list">
               {results.map((item) => (
-                <div key={item.level}>
+                <div key={`${item.level}-${item.title}`}>
                   <span>LEVEL {item.level} · {item.title}</span>
                   <strong>{formatNumber(item.score)}점</strong>
                   <small>오답 {item.mistakes}회</small>
