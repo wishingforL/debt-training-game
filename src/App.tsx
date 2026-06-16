@@ -22,19 +22,20 @@ import {
   repaymentMonthsForPayment,
   type CalculationResult,
 } from "./calculation";
-import { LEVELS, SUPPORT_OPTIONS } from "./data/levels";
-import type { FieldValue, IntakeField, LevelData, LevelResult, StoredStats } from "./types";
+import { LEVELS, PRACTICE_LEVELS, SUPPORT_OPTIONS } from "./data/levels";
+import type { DecoyClue, FieldValue, IntakeField, LevelData, LevelResult, ScreenName, StoredStats } from "./types";
 import startHero from "../assets/start-hero.jpg";
 
 const STORAGE_KEY = "rookie-debt-adjustment-game-v1";
 const PAYMENT_SNAP_TOLERANCE = 0.25;
 const MONEY_INPUT_SCALE = 10;
 const PAYMENT_SLIDER_MAX = 100;
-const HIGH_INCOME_PAYMENT_THRESHOLD = 400;
-const DEFAULT_PAYMENT_FOCUS_RANGE_RATIO = 0.1;
-const DEFAULT_PAYMENT_FOCUS_SLIDER_SHARE = 10;
-const HIGH_INCOME_PAYMENT_FOCUS_RANGE_RATIO = 0.05;
-const HIGH_INCOME_PAYMENT_FOCUS_SLIDER_SHARE = 15;
+const PAYMENT_FOCUS_RULES = [
+  { minIncome: 400, rangeRatio: 0.07, sliderShare: 20 },
+  { minIncome: 300, rangeRatio: 0.08, sliderShare: 15 },
+  { minIncome: 200, rangeRatio: 0.09, sliderShare: 12 },
+  { minIncome: 0, rangeRatio: 0.1, sliderShare: 10 },
+];
 const LOW_PAYMENT_COMPACT_LIMIT = 10;
 const LOW_LIVING_EXPENSE_RATIO = 0.3;
 const LOW_PAYMENT_SLIDER_WEIGHT = 1.5;
@@ -116,18 +117,100 @@ const TUTORIAL_PAGES = [
     visual: "score",
     lines: [
       "최종미션을 제출하면 점수 팝업이 뜹니다.",
-      "단서를 많이 찾고 오답이 적을수록 높은 점수를 받습니다.",
-      "결과 보기 전 문항 점수와 단서 수, 오답 수를 확인하세요.",
+      "기본 500점에서 단서 보너스와 오답 감점이 반영됩니다.",
+      "결과 보기 전 문항 점수와 만점, 단서 수, 오답 수를 확인하세요.",
     ],
     chips: ["문항 점수", "단서", "오답", "결과 보기"],
   },
 ];
+const TUTORIAL_GROUPS = [
+  {
+    badge: "게임 안내",
+    title: "문항을 고르고 단서를 찾습니다.",
+    sections: TUTORIAL_PAGES.slice(0, 3),
+  },
+  {
+    badge: "접수 완료",
+    title: "지원구분과 최종미션을 제출합니다.",
+    sections: TUTORIAL_PAGES.slice(3),
+  },
+];
+const TUTORIAL_CHIP_EXAMPLES: Record<string, Record<string, string>> = {
+  "게임 소개": {
+    "문항 선택": "표지를 누른 뒤 레벨과 문항을 선택합니다.",
+    "단서 찾기": "고객의 말을 읽고 접수에 필요한 소득, 가족, 채무 같은 단서를 직접 누릅니다.",
+    "지원구분": "찾은 연체일수를 기준으로 지원구분을 선택합니다.",
+    "최종미션": "지원구분 선택 뒤 생활비와 월납부액, 상환기간을 제출합니다.",
+  },
+  "단서 찾기": {
+    "텍스트 터치": "예: 월 소득 단서라면 문장 안의 '월 2,500천원'을 누릅니다.",
+    "동그라미 표시": "맞는 단서를 누르면 해당 문구가 동그라미로 표시됩니다.",
+    "값 정리": "찾은 단서는 아래 목록에 항목별로 자동 정리됩니다.",
+    "접수하기": "필요한 단서를 모두 찾으면 지원구분 선택하기로 넘어갑니다.",
+  },
+  "다시보기": {
+    "찾은 단서": "내가 찾은 값을 다시 모아 확인합니다.",
+    "시나리오": "고객이 말한 원문을 다시 봅니다.",
+    "힌트": "판단 기준과 계산 기준을 확인합니다.",
+    "정답 보기": "두 번 이상 틀리면 정답을 확인할 수 있습니다.",
+  },
+  지원구분: {
+    "30일 이하": "연체 30일 이하는 신속채무조정입니다.",
+    "31~89일": "연체 31~89일은 사전채무조정입니다.",
+    "90일 이상": "연체 90일 이상은 개인워크아웃입니다.",
+  },
+  최종미션: {
+    생활비: "소득에서 보호할 생활비를 먼저 남깁니다.",
+    월납부액: "남은 소득을 10천원 단위로 반올림해 월납부액으로 봅니다.",
+    상환기간: "채무 금액과 지원구분별 계산 기준으로 상환기간을 확인합니다.",
+    추가인정: "레벨 5부터는 주거비, 교육비, 의료비, 기타 추가인정 생활비를 반영합니다.",
+  },
+  점수: {
+    "문항 점수": "제출하면 이번 문항 점수가 팝업으로 표시됩니다.",
+    단서: "단서를 많이 찾을수록 점수에 유리합니다.",
+    오답: "오답이 많으면 점수가 깎입니다.",
+    "결과 보기": "점수 팝업에서 결과 보기로 계산 결과 화면을 확인합니다.",
+  },
+};
 const emptyStats: StoredStats = {
   bestScore: 0,
   clearedLevel: 0,
   runs: 0,
   lastScore: 0,
 };
+
+const FOX_TIERS = [
+  {
+    icon: "🌱",
+    minRatio: 0,
+    name: "새싹여우",
+    description: "채무조정의 첫걸음을 내딛은 여우",
+  },
+  {
+    icon: "🎒",
+    minRatio: 0.4,
+    name: "여행여우",
+    description: "기본적인 접수 단서를 찾을 수 있는 여우",
+  },
+  {
+    icon: "🧭",
+    minRatio: 0.6,
+    name: "탐험여우",
+    description: "다양한 상황과 조건을 분석할 수 있는 여우",
+  },
+  {
+    icon: "🔍",
+    minRatio: 0.75,
+    name: "탐정여우",
+    description: "복잡한 사례 속 숨겨진 단서를 찾아내는 여우",
+  },
+  {
+    icon: "👑",
+    minRatio: 0.9,
+    name: "마스터여우",
+    description: "어떤 사례도 해결할 수 있는 최고의 심사여우",
+  },
+];
 
 type Screen = "start" | "tutorial" | "levelSelect" | "game" | "result";
 type Phase = "scenario" | "intake" | "calculation" | "mission";
@@ -163,7 +246,7 @@ const normalizeNumber = (value: string) => Number(value.replace(/,/g, "").trim()
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
 function isMoneyField(field: IntakeField) {
-  return MONEY_FIELD_KEYS.has(field.key);
+  return field.unit === "천원" || MONEY_FIELD_KEYS.has(field.key);
 }
 
 function formatAmount(valueInManwon: number) {
@@ -172,6 +255,60 @@ function formatAmount(valueInManwon: number) {
 
 function formatAmountNumber(valueInManwon: number) {
   return formatMoney(Math.round(valueInManwon) * MONEY_INPUT_SCALE);
+}
+
+function comparisonSign(value: number) {
+  if (value > 0) return ">";
+  if (value < 0) return "<";
+  return "=";
+}
+
+function livingExpenseIncomeComparison(maxLivingExpense: number, income: number) {
+  return `${formatAmount(maxLivingExpense)} - ${formatAmount(income)} ${comparisonSign(maxLivingExpense - income)} 0`;
+}
+
+function canUseMaxRepaymentPeriod(maxLivingExpense: number, income: number) {
+  return maxLivingExpense - income >= 0;
+}
+
+function maxRepaymentAvailabilityText(maxLivingExpense: number, income: number, maxRepaymentMonths: number) {
+  const status = canUseMaxRepaymentPeriod(maxLivingExpense, income) ? "가능" : "불가";
+  return `최대 상환기간(${maxRepaymentMonths}개월) ${status}`;
+}
+
+function livingExpenseFormulaText(baseIncome: number, monthlyPayment: number, livingExpense: number) {
+  return `${formatAmount(baseIncome)} - ${formatAmount(monthlyPayment)} = ${formatAmount(livingExpense)}`;
+}
+
+function recognizedLivingExpenseFormulaText(maxLivingExpense: number, additionalLivingExpense: number, livingExpense: number) {
+  return `${formatAmount(maxLivingExpense)} + ${formatAmount(additionalLivingExpense)} = ${formatAmount(livingExpense)}`;
+}
+
+function monthlyPaymentFormulaText(baseIncome: number, livingExpense: number, monthlyPayment: number) {
+  return `${formatAmount(baseIncome)} - ${formatAmount(livingExpense)} = ${formatAmount(monthlyPayment)}`;
+}
+
+function maxLivingExpenseIncomeLabel(hasSecuredPayment: boolean) {
+  return (
+    <>
+      <span>최대생활비</span>
+      <span>
+        - {hasSecuredPayment ? <><strong>남은</strong>소득</> : "소득"}
+      </span>
+    </>
+  );
+}
+
+function hasSecuredIncomeDeduction({
+  income,
+  repaymentBaseIncome,
+  securedPayment,
+}: {
+  income: number;
+  repaymentBaseIncome: number;
+  securedPayment: number;
+}) {
+  return securedPayment > 0 && repaymentBaseIncome < income;
 }
 
 function fieldUnitLabel(field: IntakeField) {
@@ -197,8 +334,35 @@ type PaymentSliderSegment = {
   sliderStart: number;
 };
 
+const SCORE_BASE = 500;
+const SCORE_CLUE_BONUS = 20;
+const SCORE_MISTAKE_PENALTY = 50;
+const SCORE_MINIMUM = 100;
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function levelMaxScoreFor(level: Pick<LevelData, "fields">) {
+  return SCORE_BASE + level.fields.length * SCORE_CLUE_BONUS;
+}
+
+function levelScoreFor(level: Pick<LevelData, "fields">, foundClues: number, mistakes: number) {
+  const boundedClues = clamp(foundClues, 0, level.fields.length);
+  return Math.max(SCORE_MINIMUM, SCORE_BASE + boundedClues * SCORE_CLUE_BONUS - mistakes * SCORE_MISTAKE_PENALTY);
+}
+
+function scoreWithMax(score: number, maxScore: number) {
+  return `${formatNumber(score)}/${formatNumber(maxScore)}점`;
+}
+
+function foxTierFor(score: number, maxScore: number) {
+  const ratio = maxScore > 0 ? score / maxScore : 0;
+  return [...FOX_TIERS].reverse().find((tier) => ratio >= tier.minRatio) ?? FOX_TIERS[0];
+}
+
+function paymentFocusRuleForIncome(income: number) {
+  return PAYMENT_FOCUS_RULES.find((rule) => income >= rule.minIncome) ?? PAYMENT_FOCUS_RULES[PAYMENT_FOCUS_RULES.length - 1];
 }
 
 function buildPaymentSliderSegments(income: number, targetPayment: number) {
@@ -208,9 +372,9 @@ function buildPaymentSliderSegments(income: number, targetPayment: number) {
   }
 
   const safeTarget = clamp(targetPayment, 0, safeIncome);
-  const isHighIncome = safeIncome >= HIGH_INCOME_PAYMENT_THRESHOLD;
-  const focusRangeRatio = isHighIncome ? HIGH_INCOME_PAYMENT_FOCUS_RANGE_RATIO : DEFAULT_PAYMENT_FOCUS_RANGE_RATIO;
-  const focusSliderShare = isHighIncome ? HIGH_INCOME_PAYMENT_FOCUS_SLIDER_SHARE : DEFAULT_PAYMENT_FOCUS_SLIDER_SHARE;
+  const focusRule = paymentFocusRuleForIncome(safeIncome);
+  const focusRangeRatio = focusRule.rangeRatio;
+  const focusSliderShare = focusRule.sliderShare;
   const focusStart = clamp(safeTarget * (1 - focusRangeRatio), 0, safeIncome);
   const focusEnd = Math.max(focusStart, clamp(safeTarget * (1 + focusRangeRatio), 0, safeIncome));
   const lowPaymentEnd = Math.min(LOW_PAYMENT_COMPACT_LIMIT, focusStart);
@@ -297,6 +461,20 @@ function isCorrectValue(field: IntakeField, value: FieldValue | undefined) {
 }
 
 function fieldsInScenarioOrder(level: LevelData) {
+  if (level.narrative) {
+    const screenOrder: ScreenName[] = ["소득", "가족", "주거", "채무현황", "재산", "특이사항", "급여가압류"];
+
+    return [...level.fields].sort((first, second) => {
+      const firstScreenOrder = screenOrder.indexOf(first.screen);
+      const secondScreenOrder = screenOrder.indexOf(second.screen);
+      const normalizedFirst = firstScreenOrder >= 0 ? firstScreenOrder : screenOrder.length;
+      const normalizedSecond = secondScreenOrder >= 0 ? secondScreenOrder : screenOrder.length;
+
+      if (normalizedFirst !== normalizedSecond) return normalizedFirst - normalizedSecond;
+      return level.fields.findIndex((field) => field.key === first.key) - level.fields.findIndex((field) => field.key === second.key);
+    });
+  }
+
   const ordered: IntakeField[] = [];
 
   level.scenario.forEach((line) => {
@@ -336,6 +514,14 @@ function numericAnswer(level: LevelData, key: string) {
   return typeof value === "number" ? value : 0;
 }
 
+function numericAnswers(level: LevelData, key: string) {
+  return round1(
+    level.fields
+      .filter((field) => field.key === key || field.key.startsWith(`${key}.`))
+      .reduce((sum, field) => sum + (typeof field.answer === "number" ? field.answer : 0), 0),
+  );
+}
+
 function stringAnswer(level: LevelData, key: string) {
   const value = level.fields.find((field) => field.key === key)?.answer;
   return typeof value === "string" ? value : "";
@@ -348,7 +534,8 @@ function additionalLivingExpenseItems(level: LevelData): AdditionalLivingExpense
   const isSeoul = stringAnswer(level, "residenceArea") === "서울" || scenarioText.includes("서울");
   const hasCollegeChild = scenarioText.includes("대학생");
   const medicalExpense = numericAnswer(level, "medicalExpense");
-  const isSingleHousehold = numericAnswer(level, "dependents") === 0 && scenarioText.includes("미혼");
+  const dependents = numericAnswer(level, "dependents") || numericAnswers(level, "dependent");
+  const isSingleHousehold = dependents === 0 && scenarioText.includes("미혼");
 
   return [
     {
@@ -407,10 +594,11 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
     .find((label) => line.includes(label));
   if (prefixedLabel) return prefixedLabel;
 
-  if (field.key === "dependents") {
+  if (field.key === "dependents" || field.key.startsWith("dependent.")) {
     if (Number(field.answer) === 0 && line.includes("미혼")) return "미혼";
     const dependentPhrase = line.split("을 부양")[0]?.split("를 부양")[0]?.trim();
     if (dependentPhrase && dependentPhrase !== line) return dependentPhrase;
+    if (line.includes(field.label)) return field.label;
   }
 
   if (field.key === "housingType") {
@@ -430,6 +618,22 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
     return "본인 명의 집";
   }
 
+  if (field.key === "homeOwned" && line.includes("공동명의 집")) {
+    return "공동명의 집";
+  }
+
+  if (field.key === "debtReason") {
+    const reasonMarkers = [
+      "배우자 퇴직 이후 생활비",
+      "생활비와 모친 병원비 부담",
+      "폐업 이후 운영자금 대출",
+      "급여가 줄어든 뒤",
+      "대학생 자녀 등록금",
+    ];
+    const reasonMarker = reasonMarkers.find((marker) => line.includes(marker));
+    if (reasonMarker) return reasonMarker;
+  }
+
   if (field.key === "wageGarnishment" && line.includes("급여")) {
     if (line.includes("급여가 압류")) return "급여가 압류";
     return "급여";
@@ -440,7 +644,51 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
   }
 
   if (line.includes(answerLabel)) return answerLabel;
+
+  const clue = fieldClue(field);
+  if (clue === line) return line.replace(/\.$/, "");
+  if (line.includes(clue)) return clue.replace(/\.$/, "");
   return answerLabel;
+}
+
+function allIndexesOf(text: string, query: string) {
+  const indexes: number[] = [];
+  if (!query) return indexes;
+
+  let index = text.indexOf(query);
+  while (index >= 0) {
+    indexes.push(index);
+    index = text.indexOf(query, index + query.length);
+  }
+
+  return indexes;
+}
+
+function markerIndexInContext(text: string, label: string, context?: string) {
+  if (!label) return -1;
+
+  if (context) {
+    const contextIndex = text.indexOf(context);
+    const labelIndexInContext = context.indexOf(label);
+    if (contextIndex >= 0 && labelIndexInContext >= 0) {
+      return contextIndex + labelIndexInContext;
+    }
+
+    const labelIndexes = allIndexesOf(text, label);
+    const contextEnd = contextIndex >= 0 ? contextIndex + context.length : -1;
+    const labelInsideContext = labelIndexes.find((index) => index >= contextIndex && index < contextEnd);
+    if (labelInsideContext !== undefined) return labelInsideContext;
+  }
+
+  return text.indexOf(label);
+}
+
+function scenarioMarkerIndex(field: IntakeField, line: string, label: string) {
+  return markerIndexInContext(line, label, fieldClue(field));
+}
+
+function scenarioDecoyMarkerIndex(decoy: DecoyClue, line: string) {
+  return markerIndexInContext(line, decoy.label, decoy.clue);
 }
 
 function isCorrectClue(field: IntakeField, selectedClue: FieldValue | undefined) {
@@ -456,6 +704,34 @@ function levelSelectClueCount(item: LevelData) {
 }
 
 function fieldHint(field: IntakeField) {
+  if (field.key.startsWith("dependent.")) {
+    return [
+      `${field.screen} 화면의 ${field.label} 항목입니다.`,
+      "부양가족으로 인정되는 사람의 단서만 터치하세요. 소득이 있거나 별도 산정 대상이 아닌 가족은 선택하지 않습니다.",
+    ].join("\n");
+  }
+
+  if (field.key.startsWith("unsecuredDebt.")) {
+    return [
+      `${field.screen} 화면의 ${field.label} 항목입니다.`,
+      "신용채무에 해당하는 개별 채무 금액 단서를 터치하세요. 여러 채무는 각각 찾아 합산합니다.",
+    ].join("\n");
+  }
+
+  if (field.key.startsWith("securedDebt.")) {
+    return [
+      `${field.screen} 화면의 ${field.label} 항목입니다.`,
+      "담보채무에 해당하는 개별 채무 금액 단서를 터치하세요. 신용채무와 구분해서 확인합니다.",
+    ].join("\n");
+  }
+
+  if (field.key.startsWith("securedPayment.")) {
+    return [
+      `${field.screen} 화면의 ${field.label} 항목입니다.`,
+      "담보대출 원리금이나 이자처럼 월 소득에서 먼저 차감되는 금액 단서를 터치하세요.",
+    ].join("\n");
+  }
+
   const hints: Record<string, string> = {
     income: "월 소득을 말한 단서 텍스트를 직접 터치하세요.",
     dependents: "부양하고 있는 가족을 설명한 단서 텍스트를 터치하세요. 본인은 부양가족 수에 넣지 않습니다.",
@@ -484,6 +760,34 @@ function fieldHint(field: IntakeField) {
   ].join("\n");
 }
 
+function practiceFieldHint(field: IntakeField, level: LevelData) {
+  if (!level.narrative) return fieldHint(field);
+
+  const notes: string[] = [];
+
+  if (field.screen === "가족") {
+    notes.push("인정 부양가족만 선택합니다. 소득으로 생활하는 가족, 이혼한 배우자처럼 제외 사유가 있는 사람은 누르지 않습니다.");
+  }
+
+  if (field.screen === "채무현황") {
+    notes.push("신용채무, 담보채무, 담보 원리금은 서로 역할이 다릅니다. 월납부액 산정 대상은 신용채무이고, 담보 원리금이나 이자는 남은 소득 계산에만 반영합니다.");
+  }
+
+  if (field.screen === "특이사항") {
+    notes.push("채무가 늘어난 사유와 추가인정 생활비 단서를 구분해서 확인합니다.");
+  }
+
+  if (field.screen === "주거") {
+    notes.push("지역, 보증금, 월세, 전세보증금은 각각 다른 단서입니다. 한 문장 안에 여러 값이 함께 나올 수 있습니다.");
+  }
+
+  if (field.screen === "재산") {
+    notes.push("차량, 주택, 지분, 시세처럼 재산 판단에 필요한 단서를 구분해 누릅니다.");
+  }
+
+  return [fieldHint(field), ...(notes.length > 0 ? ["", "실전 포인트", ...notes] : [])].join("\n");
+}
+
 function fieldAnswerText(field: IntakeField) {
   const clue = fieldClue(field);
   const marker = scenarioMarkerLabel(field, clue);
@@ -497,19 +801,33 @@ function fieldAnswerText(field: IntakeField) {
 
 function supportHint(level: LevelData) {
   const overdueDays = numericAnswer(level, "overdueDays");
-
-  return [
+  const baseHint = [
     `현재 문항 연체일수: ${formatNumber(overdueDays)}일`,
     "30일 이하 = 신속채무조정",
     "31~89일 = 사전채무조정",
     "90일 이상 = 개인워크아웃",
+  ];
+
+  if (!level.narrative) return baseHint.join("\n");
+
+  return [
+    ...baseHint,
+    "",
+    "실전 포인트",
+    "지원구분은 연체일수만 먼저 봅니다.",
+    "가족 수, 채무 금액, 담보 여부는 월납부액과 상환기간 계산 단계에서 반영합니다.",
   ].join("\n");
 }
 
 function missionHint(calculation: CalculationResult, level: LevelData) {
   const overdueDays = numericAnswer(level, "overdueDays");
   const supportMeta = supportOptionMeta(calculation.supportType);
-  const incomeLabel = calculation.securedPayment > 0 ? "남은 소득" : "소득";
+  const usesSecuredDeduction = hasSecuredIncomeDeduction({
+    income: calculation.income,
+    repaymentBaseIncome: calculation.repaymentBaseIncome,
+    securedPayment: calculation.securedPayment,
+  });
+  const incomeLabel = usesSecuredDeduction ? "남은 소득" : "소득";
   const livingLines =
     level.level >= 5
       ? [
@@ -528,15 +846,25 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
     `${formatNumber(overdueDays)}일 → ${calculation.supportType}`,
     "",
     "2. 월납부액: 10천원 단위로 반올림하여 산출",
-    calculation.securedPayment > 0
+    usesSecuredDeduction
       ? `남은 소득: 총 소득 ${formatAmount(calculation.income)} - 담보 원리금 ${formatAmount(calculation.securedPayment)} = ${formatAmount(calculation.repaymentBaseIncome)}`
       : `소득: ${formatAmount(calculation.income)}`,
     ...livingLines,
     `${incomeLabel} ${formatAmount(calculation.repaymentBaseIncome)} - 생활비 ${formatAmount(calculation.adjustedLivingExpense)} = 월납부액 ${formatAmount(calculation.monthlyPayment)}`,
     "",
-    "3. 상환기간: 대상채무, 월납부액, 상환조건으로 계산",
+    "3. 최대 상환기간 월납부액",
     `${calculation.supportType}: ${supportMeta.detail}`,
     repaymentPeriodFormulaText(calculation),
+    ...(level.narrative
+      ? [
+          "",
+          "실전 정리",
+          "인정 부양가족만 가구수에 반영합니다.",
+          "대상채무는 신용채무 합계입니다.",
+          "담보 원리금이나 이자는 남은 소득 계산에서 먼저 차감합니다.",
+          "원리금상환 방식은 이자율을 반영해 상환기간을 계산합니다.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -550,13 +878,11 @@ function missionAnswerText(calculation: CalculationResult) {
 }
 
 function repaymentPeriodFormulaText(calculation: CalculationResult) {
-  const capLabel = calculation.cappedByMaxPeriod ? `, 최대 ${calculation.maxRepaymentMonths}개월 적용` : "";
-
   if (calculation.annualInterestRate > 0) {
-    return `${formatAmount(calculation.targetDebt)}을 월납부액 ${formatAmount(calculation.monthlyPayment)}으로 납부하고, 연 ${formatMoney(calculation.annualInterestRate * 100)}% ${calculation.repaymentMethod} 조건 적용 = ${calculation.repaymentPeriod}개월${capLabel}`;
+    return `${formatAmount(calculation.targetDebt)}, ${calculation.maxRepaymentMonths}개월 원리금 납부\n= ${formatAmount(calculation.monthlyPayment)}`;
   }
 
-  return `${formatAmount(calculation.targetDebt)}을 월납부액 ${formatAmount(calculation.monthlyPayment)}으로 나누어 계산 = ${calculation.repaymentPeriod}개월${capLabel}`;
+  return `${formatAmount(calculation.targetDebt)}, ${calculation.maxRepaymentMonths}개월 원금 납부\n= ${formatAmount(calculation.monthlyPayment)}`;
 }
 
 function supportOptionMeta(option: string) {
@@ -567,6 +893,17 @@ function supportOptionMeta(option: string) {
   };
 
   return labels[option] ?? { detail: "", title: option };
+}
+
+function resultSupportTypeLabel(option: string) {
+  if (option !== "사전채무조정") return option;
+
+  return (
+    <>
+      사전채무조정
+      <small className="support-rate-note">(평균 이자 6% 가정)</small>
+    </>
+  );
 }
 
 function supportTermsFor(option: string, fallback: CalculationResult) {
@@ -586,7 +923,10 @@ function App() {
   const [stats, setStats] = useState<StoredStats>(() => loadStats());
   const [screen, setScreen] = useState<Screen>("start");
   const [tutorialIndex, setTutorialIndex] = useState(0);
+  const [openTutorialSection, setOpenTutorialSection] = useState(-1);
+  const [tutorialExample, setTutorialExample] = useState<{ sectionKey: string; chip: string } | null>(null);
   const [selectedLevel, setSelectedLevel] = useState(() => Math.min(stats.clearedLevel, LEVELS.length - 1));
+  const [lastLevelTap, setLastLevelTap] = useState<{ index: number; time: number } | null>(null);
   const [levelIndex, setLevelIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("scenario");
   const [activeFieldIndex, setActiveFieldIndex] = useState(0);
@@ -617,15 +957,20 @@ function App() {
   const [tutorialPayment, setTutorialPayment] = useState(50);
   const [missionPage, setMissionPage] = useState<0 | 1>(0);
   const [homeChoiceOpen, setHomeChoiceOpen] = useState(false);
+  const [reviewResult, setReviewResult] = useState<LevelResult | null>(null);
   const [showAllClues, setShowAllClues] = useState(false);
   const [clueFilterScreen, setClueFilterScreen] = useState<string | null>(null);
   const [livingDependentsDraft, setLivingDependentsDraft] = useState<number | null>(null);
   const [scorePopupOpen, setScorePopupOpen] = useState(false);
+  const [tierPopupOpen, setTierPopupOpen] = useState(false);
   const [clueReviewOpen, setClueReviewOpen] = useState(false);
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [practiceIndex, setPracticeIndex] = useState(0);
 
-  const level = LEVELS[levelIndex];
+  const level = practiceMode ? PRACTICE_LEVELS[practiceIndex] ?? PRACTICE_LEVELS[0] : LEVELS[levelIndex];
   const calculation = useMemo(() => calculateLevel(level), [level]);
-  const livingDependents = livingDependentsDraft ?? Math.max(0, calculation.householdMembers - 1);
+  const defaultLivingDependents = practiceMode ? 0 : Math.max(0, calculation.householdMembers - 1);
+  const livingDependents = livingDependentsDraft ?? defaultLivingDependents;
   const livingBasis = useMemo(() => livingExpenseBasisForDependents(livingDependents), [livingDependents]);
   const extraLivingItems = useMemo(() => additionalLivingExpenseItems(level), [level]);
   const additionalLivingExpense = useMemo(
@@ -679,10 +1024,17 @@ function App() {
       selectedSupportType === calculation.mission.supportType
         ? calculation.mission.monthlyPayment
         : roundedRequiredPayment;
+    const isMissionMaxPeriodAnswer =
+      selectedSupportType === calculation.mission.supportType &&
+      calculation.cappedByMaxPeriod &&
+      monthlyPayment === calculation.mission.monthlyPayment;
     const acceptsRoundedMaxPeriod =
-      rawRepaymentMonths !== null &&
-      rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
-      monthlyPayment === roundedRequiredPayment;
+      isMissionMaxPeriodAnswer ||
+      (
+        rawRepaymentMonths !== null &&
+        rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
+        monthlyPayment === roundedRequiredPayment
+      );
     const exceedsMaxPeriod =
       rawRepaymentMonths !== null &&
       rawRepaymentMonths > selectedTerms.maxRepaymentMonths &&
@@ -743,8 +1095,11 @@ function App() {
   const allCluesFound = level.fields.every((field) => solved[field.key]);
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
   const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
-  const phaseProgressWidth = ((levelIndex + phaseStep / 4) / LEVELS.length) * 100;
+  const totalCaseCount = practiceMode ? PRACTICE_LEVELS.length : LEVELS.length;
+  const currentCaseIndex = practiceMode ? practiceIndex : levelIndex;
+  const phaseProgressWidth = ((currentCaseIndex + phaseStep / 4) / totalCaseCount) * 100;
   const scenarioOrderedFields = useMemo(() => fieldsInScenarioOrder(level), [level]);
+  const scenarioActiveField = scenarioOrderedFields.find((field) => !solved[field.key]) ?? activeField;
 
   const orderedScreenNames = useMemo(() => {
     const ordered: string[] = [];
@@ -769,15 +1124,25 @@ function App() {
     });
   }, [level, orderedScreenNames, solved]);
   const foundClueCount = useMemo(() => level.fields.filter((field) => solved[field.key]).length, [level, solved]);
-  const maxLevelScore = 500 + level.level * 60 + level.fields.length * 20;
-  const currentLevelScore = Math.max(100, 500 + level.level * 60 + foundClueCount * 20 - levelMistakes * 50);
+  const maxLevelScore = levelMaxScoreFor(level);
+  const currentLevelScore = levelScoreFor(level, foundClueCount, levelMistakes);
   const currentStarCount = Math.max(1, Math.min(5, Math.ceil((currentLevelScore / maxLevelScore) * 5)));
+  const hasCurrentSecuredIncomeDeduction = hasSecuredIncomeDeduction({
+    income: calculation.income,
+    repaymentBaseIncome: calculation.repaymentBaseIncome,
+    securedPayment: calculation.securedPayment,
+  });
+  const resultMaxScore = results.reduce((sum, item) => sum + item.maxScore, 0);
+  const resultTier = foxTierFor(sessionScore, resultMaxScore);
+  const resultTierPercent = resultMaxScore > 0 ? Math.min(100, Math.round((sessionScore / resultMaxScore) * 100)) : 0;
+  const canStartPractice = resultTier.name === "마스터여우";
+  const isLastPracticeLevel = practiceIndex >= PRACTICE_LEVELS.length - 1;
 
   const activeScenarioTargets = useMemo(() => {
-    const currentClue = activeField ? fieldClue(activeField) : "";
+    const currentClue = scenarioActiveField ? fieldClue(scenarioActiveField) : "";
     const currentFields = scenarioOrderedFields.filter((field) => fieldClue(field) === currentClue);
     return currentFields.filter(Boolean);
-  }, [activeField, scenarioOrderedFields]);
+  }, [scenarioActiveField, scenarioOrderedFields]);
 
   const screenClueGroups = useMemo(() => {
     return orderedScreenNames
@@ -816,10 +1181,15 @@ function App() {
     if (allCluesFound) return "모든 단서를 찾았습니다.";
 
     const labels = uniqueValues(activeScenarioTargets.filter((field) => !solved[field.key]).map((field) => field.label));
-    if (labels.length === 0) return `${activeField.screen} 단서를 찾아주세요.`;
-    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요.`;
-    return `${activeField.screen} 단서를 찾아주세요.`;
-  }, [activeField, activeScenarioTargets, allCluesFound, solved]);
+    const practiceSuffix = practiceMode ? " 인정 단서만 누르세요." : "";
+    if (labels.length === 0) return `${scenarioActiveField.screen} 단서를 찾아주세요.${practiceSuffix} (단어 클릭)`;
+    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요.${practiceSuffix} (단어 클릭)`;
+    return `${scenarioActiveField.screen} 단서를 찾아주세요. (단어 클릭)`;
+  }, [activeScenarioTargets, allCluesFound, practiceMode, scenarioActiveField, solved]);
+
+  const scenarioDisplayLines = useMemo(() => {
+    return practiceMode ? [level.scenario.join(" ")] : level.scenario;
+  }, [level.scenario, practiceMode]);
 
   const entryItems = useMemo(() => {
     const groupedScreens = new Set<string>();
@@ -889,24 +1259,55 @@ function App() {
     setRepaymentDraft(null);
     setMissionPage(0);
     setHomeChoiceOpen(false);
+    setReviewResult(null);
     setShowAllClues(false);
     setClueFilterScreen(null);
     setLivingDependentsDraft(null);
     setScorePopupOpen(false);
+    setTierPopupOpen(false);
     setClueReviewOpen(false);
   }
 
   function startRun(startIndex = selectedLevel) {
+    setPracticeMode(false);
+    setPracticeIndex(0);
     setResults([]);
     setSessionScore(0);
+    setReviewResult(null);
+    setTierPopupOpen(false);
     resetLevelState(startIndex);
     setScreen("game");
+  }
+
+  function startPracticeRun() {
+    if (!canStartPractice) return;
+
+    setPracticeMode(true);
+    setPracticeIndex(0);
+    setReviewResult(null);
+    setTierPopupOpen(false);
+    resetLevelState(0);
+    setScreen("game");
+  }
+
+  function chooseLevelCase(index: number) {
+    const now = Date.now();
+    setSelectedLevel(index);
+
+    if (lastLevelTap?.index === index && now - lastLevelTap.time < 520) {
+      setLastLevelTap(null);
+      startRun(index);
+      return;
+    }
+
+    setLastLevelTap({ index, time: now });
   }
 
   function resetStoredStats() {
     saveStats(emptyStats);
     setStats(emptyStats);
     setSelectedLevel(0);
+    setLastLevelTap(null);
   }
 
   function prepareField(index: number) {
@@ -1026,12 +1427,45 @@ function App() {
   }
 
   function scenarioFieldsForLine(line: string) {
-    return level.fields.filter((field) => fieldClue(field) === line);
+    return level.fields.filter((field) => {
+      const clue = fieldClue(field);
+      if (clue === line || line.includes(clue)) return true;
+
+      const markerLabel = scenarioMarkerLabel(field, line);
+      return markerLabel.length > 0 && line.includes(markerLabel);
+    });
+  }
+
+  function scenarioDecoysForLine(line: string) {
+    return (level.decoys ?? []).filter((decoy) => line.includes(decoy.clue) || line.includes(decoy.label));
   }
 
   function isScenarioLineComplete(line: string) {
     const lineFields = scenarioFieldsForLine(line);
     return lineFields.length > 0 && lineFields.every((field) => solved[field.key]);
+  }
+
+  function handleScenarioDecoyTap(decoy: DecoyClue) {
+    const targetField =
+      activeScenarioTargets.find((field) => field.screen === decoy.screen && !solved[field.key]) ??
+      activeScenarioTargets.find((field) => !solved[field.key]) ??
+      activeField;
+    const nextAttempts = (wrongAttempts[targetField.key] ?? 0) + 1;
+
+    setWrongAttempts((current) => ({ ...current, [targetField.key]: nextAttempts }));
+    setLevelMistakes((count) => count + 1);
+    setFeedback(`${decoy.label}은(는) 선택하지 않는 단서입니다. ${decoy.reason}`);
+
+    if (nextAttempts >= 2) {
+      openAssist({
+        title: "제외 단서",
+        body: [
+          `${decoy.label}은(는) 이번 문항에서 선택하지 않습니다.`,
+          decoy.reason,
+          "인정되는 부양가족 또는 현재 찾고 있는 접수 단서를 다시 확인하세요.",
+        ].join("\n"),
+      });
+    }
   }
 
   function handleScenarioFieldsTap(fields: IntakeField[]) {
@@ -1051,7 +1485,13 @@ function App() {
       const nextAttempts = (wrongAttempts[targetField.key] ?? 0) + 1;
       setWrongAttempts((current) => ({ ...current, [targetField.key]: nextAttempts }));
       setLevelMistakes((count) => count + 1);
-      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답 문장을 볼 수 있습니다." : "지금 찾는 항목의 단서가 아니에요.");
+      const practiceWrongMessage =
+        practiceMode && targetField.screen === "가족"
+          ? "지금은 인정되는 가족 단서를 찾는 단계입니다. 제외 가족은 누르지 마세요."
+          : practiceMode && targetField.screen === "채무현황"
+            ? "지금 찾는 채무현황 항목과 다른 단서입니다. 신용채무, 담보채무, 원리금을 구분하세요."
+            : "지금 찾는 항목의 단서가 아니에요.";
+      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답 문장을 볼 수 있습니다." : practiceWrongMessage);
       showFieldAssist(targetField, nextAttempts);
       return;
     }
@@ -1093,32 +1533,56 @@ function App() {
     );
   }
 
+  function renderScenarioDecoyMarker(decoy: DecoyClue, label: string, mode: "inline" | "tail") {
+    return (
+      <button
+        className={`scenario-clue-marker is-${mode} is-decoy`}
+        key={`decoy-${decoy.screen}-${label}-${decoy.clue}`}
+        onClick={() => handleScenarioDecoyTap(decoy)}
+        type="button"
+      >
+        {label}
+      </button>
+    );
+  }
+
   function renderScenarioLine(line: string) {
-    const lineFields = scenarioFieldsForLine(line)
+    const fieldMarkers = scenarioFieldsForLine(line)
       .map((field) => {
         const label = scenarioMarkerLabel(field, line);
         return {
+          decoy: undefined,
           field,
-          index: line.indexOf(label),
+          fields: [field],
+          index: scenarioMarkerIndex(field, line, label),
           label,
         };
       })
       .filter((marker) => marker.index >= 0)
-      .reduce<Array<{ fields: IntakeField[]; index: number; label: string }>>((markers, marker) => {
+      .reduce<Array<{ decoy?: DecoyClue; fields: IntakeField[]; index: number; label: string }>>((markers, marker) => {
         const existing = markers.find((item) => item.index === marker.index && item.label === marker.label);
         if (existing) {
           existing.fields.push(marker.field);
           return markers;
         }
 
-        markers.push({ fields: [marker.field], index: marker.index, label: marker.label });
+        markers.push({ fields: marker.fields, index: marker.index, label: marker.label });
         return markers;
-      }, [])
+      }, []);
+    const decoyMarkers = scenarioDecoysForLine(line)
+      .map((decoy) => ({
+        decoy,
+        fields: [],
+        index: scenarioDecoyMarkerIndex(decoy, line),
+        label: decoy.label,
+      }))
+      .filter((marker) => marker.index >= 0);
+    const lineMarkers = [...fieldMarkers, ...decoyMarkers]
       .sort((first, second) => first.index - second.index || second.label.length - first.label.length);
     const parts = [];
     let cursor = 0;
 
-    lineFields.forEach((marker) => {
+    lineMarkers.forEach((marker) => {
       const index = marker.index;
       if (index < cursor) return;
 
@@ -1126,7 +1590,11 @@ function App() {
         parts.push(line.slice(cursor, index));
       }
 
-      parts.push(renderScenarioMarker(marker.fields, marker.label, "inline"));
+      parts.push(
+        marker.decoy
+          ? renderScenarioDecoyMarker(marker.decoy, marker.label, "inline")
+          : renderScenarioMarker(marker.fields, marker.label, "inline"),
+      );
       cursor = index + marker.label.length;
     });
 
@@ -1364,12 +1832,234 @@ function App() {
       return (
         <div className="tutorial-visual tutorial-score">
           <span>접수 완료</span>
-          <strong>900점</strong>
+          <strong>660/660점</strong>
           <div aria-hidden="true">
             {Array.from({ length: 5 }).map((_, index) => (
               <i key={index}>★</i>
             ))}
           </div>
+          <p>단서 8/8 · 오답 0회</p>
+        </div>
+      );
+    }
+
+    return null;
+  }
+
+  function renderTutorialMiniVisual(visual: string, chip: string) {
+    if (visual === "flow") {
+      if (chip === "단서 찾기") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-scenario" aria-label={`${chip} 진행 화면 예시`}>
+            <p><span className="scenario-clue-marker is-found">월 2,500천원</span> 벌고 있습니다.</p>
+            <div className="tutorial-mini-chip-row">
+              <span>소득 1/1</span>
+              <span>가족 0/1</span>
+              <span>채무 0/2</span>
+            </div>
+          </div>
+        );
+      }
+
+      if (chip === "지원구분") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-support" aria-label={`${chip} 진행 화면 예시`}>
+            {["30일 이하", "31~89일", "90일 이상"].map((item, index) => (
+              <span className={index === 2 ? "is-selected" : ""} key={item}>{item}</span>
+            ))}
+          </div>
+        );
+      }
+
+      if (chip === "최종미션") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-balance" aria-label={`${chip} 진행 화면 예시`}>
+            <div>
+              <strong>월납부액 250천원</strong>
+              <strong>생활비 2,250천원</strong>
+            </div>
+            <i aria-hidden="true" />
+            <p>상환기간 96개월</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-level" aria-label={`${chip} 진행 화면 예시`}>
+          <span>LEVEL 1</span>
+          <strong>기본상담</strong>
+          <div>
+            {[1, 2, 3].map((item) => (
+              <em key={item}>{item}</em>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (visual === "scenario") {
+      if (chip === "텍스트 터치") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-scenario" aria-label={`${chip} 진행 화면 예시`}>
+            <p>월 <button className="tutorial-mini-token" type="button">2,500천원</button> 벌고 있습니다.</p>
+            <strong>문장 안의 단서를 직접 누릅니다.</strong>
+          </div>
+        );
+      }
+
+      if (chip === "값 정리") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-list" aria-label={`${chip} 진행 화면 예시`}>
+            <span>찾은 단서</span>
+            <div><small>소득</small><strong>월 소득 2,500천원</strong></div>
+            <div><small>가족</small><strong>2명 (3인 가구)</strong></div>
+          </div>
+        );
+      }
+
+      if (chip === "접수하기") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-submit" aria-label={`${chip} 진행 화면 예시`}>
+            <span>모든 단서를 찾았습니다.</span>
+            <strong>지원구분 선택하기</strong>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-scenario" aria-label={`${chip} 진행 화면 예시`}>
+          <p><span className="scenario-clue-marker is-found">월 2,500천원</span> 벌고 있습니다.</p>
+          <div>
+            <small>소득</small>
+            <strong>월 소득 2,500천원</strong>
+          </div>
+        </div>
+      );
+    }
+
+    if (visual === "review") {
+      if (chip === "시나리오") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-scenario" aria-label={`${chip} 진행 화면 예시`}>
+            <p>월 2,500천원 벌고 있습니다.</p>
+            <p>카드값 때문에 120일째 연체 중입니다.</p>
+          </div>
+        );
+      }
+
+      if (chip === "힌트") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-hint" aria-label={`${chip} 진행 화면 예시`}>
+            <span>최종미션 힌트</span>
+            <strong>월납부액은 10천원 단위로 반올림합니다.</strong>
+          </div>
+        );
+      }
+
+      if (chip === "정답 보기") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-answer" aria-label={`${chip} 진행 화면 예시`}>
+            <span>정답</span>
+            <strong>지원구분: 개인워크아웃</strong>
+            <strong>월납부액: 250천원</strong>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-list" aria-label={`${chip} 진행 화면 예시`}>
+          <span>찾은 단서</span>
+          <div><small>연체일수</small><strong>120일</strong></div>
+          <div><small>채무</small><strong>24,000천원</strong></div>
+        </div>
+      );
+    }
+
+    if (visual === "support") {
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-support" aria-label={`${chip} 진행 화면 예시`}>
+          {["30일 이하", "31~89일", "90일 이상"].map((item) => (
+            <span className={chip === item ? "is-selected" : ""} key={item}>{item}</span>
+          ))}
+        </div>
+      );
+    }
+
+    if (visual === "balance") {
+      if (chip === "생활비") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-list" aria-label={`${chip} 진행 화면 예시`}>
+            <span>부양가족에 따른 생활비</span>
+            <div><small>MIN 생활비</small><strong>1,930천원</strong></div>
+            <div><small>MAX 생활비</small><strong>3,220천원</strong></div>
+          </div>
+        );
+      }
+
+      if (chip === "상환기간") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-list" aria-label={`${chip} 진행 화면 예시`}>
+            <span>상환기간 계산</span>
+            <div><small>대상채무</small><strong>24,000천원</strong></div>
+            <div><small>계산결과</small><strong>96개월</strong></div>
+          </div>
+        );
+      }
+
+      if (chip === "추가인정") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-list" aria-label={`${chip} 진행 화면 예시`}>
+            <span>추가인정 생활비</span>
+            <div><small>주거비</small><strong>서울 최대 600천원</strong></div>
+            <div><small>교육비</small><strong>대학생 자녀 300천원</strong></div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-balance" aria-label={`${chip} 진행 화면 예시`}>
+          <div>
+            <strong>월납부액 250천원</strong>
+            <strong>생활비 2,250천원</strong>
+          </div>
+          <i aria-hidden="true" />
+          <p>상환기간 96개월</p>
+        </div>
+      );
+    }
+
+    if (visual === "score") {
+      if (chip === "단서") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-score-detail" aria-label={`${chip} 진행 화면 예시`}>
+            <div><span>단서</span><strong>8/8</strong></div>
+            <p>단서를 많이 찾을수록 점수에 유리합니다.</p>
+          </div>
+        );
+      }
+
+      if (chip === "오답") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-score-detail" aria-label={`${chip} 진행 화면 예시`}>
+            <div><span>오답</span><strong>0회</strong></div>
+            <p>오답이 적을수록 높은 점수를 받습니다.</p>
+          </div>
+        );
+      }
+
+      if (chip === "결과 보기") {
+        return (
+          <div className="tutorial-mini-shot tutorial-mini-submit" aria-label={`${chip} 진행 화면 예시`}>
+            <span>점수 확인 완료</span>
+            <strong>결과 보기</strong>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tutorial-mini-shot tutorial-mini-score" aria-label={`${chip} 진행 화면 예시`}>
+          <span>이번 문항 점수</span>
+          <strong>660/660점</strong>
           <p>단서 8/8 · 오답 0회</p>
         </div>
       );
@@ -1390,13 +2080,43 @@ function App() {
 
   function changeLivingDependents(delta: number) {
     setLivingDependentsDraft((current) => {
-      const baseDependents = Math.max(0, calculation.householdMembers - 1);
+      const baseDependents = practiceMode ? 0 : Math.max(0, calculation.householdMembers - 1);
       return Math.max(0, Math.min(5, (current ?? baseDependents) + delta));
     });
   }
 
   function goPreviousPage() {
     setFeedback("");
+
+    if (reviewResult) {
+      setReviewResult(null);
+      return;
+    }
+
+    if (phase === "scenario") {
+      if (practiceMode) {
+        if (practiceIndex > 0) {
+          setPracticeIndex((current) => Math.max(0, current - 1));
+          resetLevelState(levelIndex);
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          });
+        }
+
+        return;
+      }
+
+      const previousResult = results[results.length - 1];
+
+      if (previousResult) {
+        setReviewResult(previousResult);
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      }
+
+      return;
+    }
 
     if (phase === "intake") {
       if (usesGroupedScreen) {
@@ -1514,6 +2234,11 @@ function App() {
   function goNextPage() {
     setFeedback("");
 
+    if (reviewResult) {
+      setReviewResult(null);
+      return;
+    }
+
     if (phase === "scenario") {
       solveAllClues();
       setMissionPage(0);
@@ -1564,14 +2289,14 @@ function App() {
     }
 
     if (phase === "calculation") {
-      finishLevel(levelIndex === LEVELS.length - 1 ? "result" : "next");
+      finishLevel(practiceMode ? (isLastPracticeLevel ? "result" : "next") : levelIndex === LEVELS.length - 1 ? "result" : "next");
     }
   }
 
   function showFieldAssist(field: IntakeField, attempts: number) {
     openAssist({
       title: attempts >= 2 ? "정답을 확인할 수 있어요" : `${field.label} 힌트`,
-      body: fieldHint(field),
+      body: practiceMode ? practiceFieldHint(field, level) : fieldHint(field),
       answer: attempts >= 2 ? fieldAnswerText(field) : undefined,
       onFill: attempts >= 2 ? () => setDraftForField(field, field.answer) : undefined,
     });
@@ -1723,13 +2448,17 @@ function App() {
     const monthlyPayment = repaymentModel.monthlyPayment;
     const repaymentPeriod = repaymentModel.repaymentPeriod;
     const mission = calculation.mission;
-    const isCorrect =
+    const matchesMissionValues =
       missionDraft.supportType === mission.supportType &&
-      repaymentModel.feedbackState === "ok" &&
-      !repaymentModel.cannotCalculatePeriod &&
-      !repaymentModel.exceedsMaxPeriod &&
       Math.abs(monthlyPayment - mission.monthlyPayment) <= 0.05 &&
       repaymentPeriod === mission.repaymentPeriod;
+    const isCorrect =
+      matchesMissionValues &&
+      (practiceMode || (
+        repaymentModel.feedbackState === "ok" &&
+        !repaymentModel.cannotCalculatePeriod &&
+        !repaymentModel.exceedsMaxPeriod
+      ));
 
     if (!isCorrect) {
       const nextAttempts = (wrongAttempts.mission ?? 0) + 1;
@@ -1741,17 +2470,52 @@ function App() {
     }
 
     setFeedback("");
+    if (practiceMode) {
+      setPhase("calculation");
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      return;
+    }
+
     setScorePopupOpen(true);
   }
 
   function finishLevel(destination: "next" | "result" = levelIndex === LEVELS.length - 1 ? "result" : "next") {
     setScorePopupOpen(false);
+    if (practiceMode) {
+      if (destination === "result" || isLastPracticeLevel) {
+        setPracticeMode(false);
+        setPracticeIndex(0);
+        setScreen("result");
+        setTierPopupOpen(false);
+        return;
+      }
+
+      setPracticeIndex((current) => Math.min(current + 1, PRACTICE_LEVELS.length - 1));
+      resetLevelState(levelIndex);
+      return;
+    }
+
     const levelScore = currentLevelScore;
     const nextResult = {
       level: level.level,
       title: level.title,
       mistakes: levelMistakes,
       score: levelScore,
+      maxScore: maxLevelScore,
+      supportType: calculation.supportType,
+      income: calculation.income,
+      targetDebt: calculation.targetDebt,
+      maxLivingExpense: calculation.maxLivingExpense,
+      additionalLivingExpense: calculation.additionalLivingExpense,
+      adjustedLivingExpense: calculation.adjustedLivingExpense,
+      securedPayment: calculation.securedPayment,
+      repaymentBaseIncome: calculation.repaymentBaseIncome,
+      monthlyPayment: calculation.monthlyPayment,
+      repaymentPeriod: calculation.repaymentPeriod,
+      maxRepaymentMonths: calculation.maxRepaymentMonths,
+      repaymentFormula: repaymentPeriodFormulaText(calculation),
     };
     const nextResults = [...results, nextResult];
     const nextScore = sessionScore + levelScore;
@@ -1771,6 +2535,7 @@ function App() {
 
     if (destination === "result") {
       setScreen("result");
+      setTierPopupOpen(true);
       return;
     }
 
@@ -1785,13 +2550,15 @@ function App() {
     });
   }
 
-  const tutorialPage = TUTORIAL_PAGES[tutorialIndex] ?? TUTORIAL_PAGES[0];
-  const tutorialProgress = ((tutorialIndex + 1) / TUTORIAL_PAGES.length) * 100;
-  const TutorialIcon = [Smartphone, ClipboardList, HelpCircle, Calculator][tutorialIndex] ?? ClipboardList;
+  const tutorialGroup = TUTORIAL_GROUPS[tutorialIndex] ?? TUTORIAL_GROUPS[0];
+  const tutorialProgress = ((tutorialIndex + 1) / TUTORIAL_GROUPS.length) * 100;
+  const TutorialIcon = tutorialIndex === 0 ? ClipboardList : Calculator;
   const shellClass = `phone-shell screen-${screen} phase-${phase} ${
     screen === "levelSelect" ? "level-select-tone" : `level-${level.level}`
   }${
     screen === "tutorial" ? ` tutorial-tone-${(tutorialIndex % 2) + 1}` : ""
+  }${
+    practiceMode ? " practice-tone" : ""
   }`;
 
   return (
@@ -1803,6 +2570,8 @@ function App() {
               className="intro-poster"
               onClick={() => {
                 setTutorialIndex(0);
+                setOpenTutorialSection(-1);
+                setTutorialExample(null);
                 setScreen("tutorial");
               }}
               type="button"
@@ -1821,7 +2590,11 @@ function App() {
               <button
                 className="arrow-action"
                 disabled={tutorialIndex === 0}
-                onClick={() => setTutorialIndex((index) => Math.max(0, index - 1))}
+                onClick={() => {
+                  setTutorialIndex((index) => Math.max(0, index - 1));
+                  setOpenTutorialSection(-1);
+                  setTutorialExample(null);
+                }}
                 type="button"
                 title="이전 튜토리얼"
               >
@@ -1829,13 +2602,15 @@ function App() {
               </button>
               <div>
                 <span>TUTORIAL</span>
-                <strong>{tutorialPage.badge}</strong>
+                <strong>{tutorialGroup.badge}</strong>
               </div>
               <button
                 className="arrow-action"
                 onClick={() => {
-                  if (tutorialIndex < TUTORIAL_PAGES.length - 1) {
+                  if (tutorialIndex < TUTORIAL_GROUPS.length - 1) {
                     setTutorialIndex((index) => index + 1);
+                    setOpenTutorialSection(-1);
+                    setTutorialExample(null);
                     return;
                   }
                   setScreen("levelSelect");
@@ -1847,38 +2622,90 @@ function App() {
               </button>
               <div className="score-pill">
                 <ClipboardList size={16} aria-hidden="true" />
-                {tutorialIndex + 1}/{TUTORIAL_PAGES.length}
+                {tutorialIndex + 1}/{TUTORIAL_GROUPS.length}
               </div>
             </header>
 
             <div className="progress-wrap" aria-label="튜토리얼 진행률">
-              <span>{tutorialIndex + 1}/{TUTORIAL_PAGES.length}</span>
+              <span>{tutorialIndex + 1}/{TUTORIAL_GROUPS.length}</span>
               <div className="progress-line">
                 <i style={{ width: `${tutorialProgress}%` }} />
               </div>
             </div>
 
-            <article className="mission-panel tutorial-card">
+            <article className="mission-panel tutorial-card tutorial-accordion-card">
               <div className="panel-heading">
                 <TutorialIcon size={22} aria-hidden="true" />
                 <div>
-                  <span>{tutorialPage.badge}</span>
-                  <h2>{tutorialPage.title}</h2>
+                  <span>{tutorialGroup.badge}</span>
+                  <h2>{tutorialGroup.title}</h2>
                 </div>
               </div>
 
-              {renderTutorialVisual(tutorialPage.visual)}
+              <div className="tutorial-accordion">
+                {tutorialGroup.sections.map((section, sectionIndex) => {
+                  const isOpen = openTutorialSection === sectionIndex;
+                  const sectionKey = `${tutorialIndex}-${sectionIndex}`;
+                  const selectedExample =
+                    tutorialExample?.sectionKey === sectionKey
+                      ? TUTORIAL_CHIP_EXAMPLES[section.badge]?.[tutorialExample.chip]
+                      : "";
+                  const SectionIcon =
+                    section.visual === "flow"
+                      ? Smartphone
+                      : section.visual === "review"
+                        ? HelpCircle
+                        : section.visual === "score"
+                          ? Trophy
+                          : section.visual === "support" || section.visual === "balance"
+                            ? Calculator
+                            : ClipboardList;
 
-              <div className="customer-log tutorial-log">
-                {tutorialPage.lines.map((line) => (
-                  <p key={line}>{line}</p>
-                ))}
-              </div>
+                  return (
+                    <section className={`tutorial-section${isOpen ? " is-open" : ""}`} key={section.badge}>
+                      <button
+                        className="tutorial-section-toggle"
+                        onClick={() => {
+                          setOpenTutorialSection((current) => (current === sectionIndex ? -1 : sectionIndex));
+                          setTutorialExample(null);
+                        }}
+                        type="button"
+                        aria-expanded={isOpen}
+                      >
+                        <SectionIcon size={18} aria-hidden="true" />
+                        <span>{section.badge}</span>
+                        <strong>{section.title}</strong>
+                        <ChevronRight size={18} aria-hidden="true" />
+                      </button>
 
-              <div className="screen-chips" aria-label="튜토리얼 핵심">
-                {tutorialPage.chips.map((chip) => (
-                  <span key={chip}>{chip}</span>
-                ))}
+                      {isOpen && (
+                        <div className="tutorial-section-body">
+                          <div className="screen-chips tutorial-chip-grid" aria-label={`${section.badge} 핵심`}>
+                            {section.chips.map((chip) => (
+                              <button
+                                className={tutorialExample?.sectionKey === sectionKey && tutorialExample.chip === chip ? "is-active" : ""}
+                                key={chip}
+                                onClick={() => setTutorialExample({ sectionKey, chip })}
+                                type="button"
+                              >
+                                {chip}
+                              </button>
+                            ))}
+                          </div>
+
+                          {selectedExample && (
+                            <>
+                              <p className="tutorial-chip-example">
+                                {selectedExample}
+                              </p>
+                              {renderTutorialMiniVisual(section.visual, tutorialExample?.chip ?? section.chips[0])}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             </article>
 
@@ -1886,15 +2713,17 @@ function App() {
               <button
                 className="primary-action"
                 onClick={() => {
-                  if (tutorialIndex < TUTORIAL_PAGES.length - 1) {
+                  if (tutorialIndex < TUTORIAL_GROUPS.length - 1) {
                     setTutorialIndex((index) => index + 1);
+                    setOpenTutorialSection(-1);
+                    setTutorialExample(null);
                     return;
                   }
                   setScreen("levelSelect");
                 }}
                 type="button"
               >
-                {tutorialIndex < TUTORIAL_PAGES.length - 1 ? (
+                {tutorialIndex < TUTORIAL_GROUPS.length - 1 ? (
                   <>
                     <ChevronRight size={19} aria-hidden="true" />
                     다음
@@ -1920,7 +2749,17 @@ function App() {
               <button className="icon-action" onClick={() => setScreen("start")} type="button" title="첫 화면">
                 <Home size={19} aria-hidden="true" />
               </button>
-              <button className="arrow-action" onClick={() => setScreen("tutorial")} type="button" title="튜토리얼">
+              <button
+                className="arrow-action"
+                onClick={() => {
+                  setTutorialIndex(0);
+                  setOpenTutorialSection(-1);
+                  setTutorialExample(null);
+                  setScreen("tutorial");
+                }}
+                type="button"
+                title="튜토리얼"
+              >
                 <ChevronLeft size={22} aria-hidden="true" />
               </button>
               <div>
@@ -1955,36 +2794,32 @@ function App() {
               {levelGroups.map((group) => {
                 return (
                   <section className="level-node level-group-node" key={group.level}>
-                    <div className="level-group-title">
+                    <div className="level-group-badge">
                       <span>LEVEL {group.level}</span>
-                      <strong>
-                        {group.title === "추가인정 생활비" ? (
-                          <>
-                            추가인정
-                            <br />
-                            생활비
-                          </>
-                        ) : (
-                          group.title
-                        )}
-                      </strong>
                     </div>
-                    <div className="level-case-grid">
-                      {group.cases.map(({ item, index }, caseIndex) => {
-                        const selected = selectedLevel === index;
+                    <div className="level-group-main">
+                      <strong className="level-group-name">
+                        {group.title}
+                      </strong>
+                      <div className="level-case-grid">
+                        {group.cases.map(({ item, index }, caseIndex) => {
+                          const selected = selectedLevel === index;
 
-                        return (
-                          <button
-                            className={selected ? "is-selected" : ""}
-                            key={item.id}
-                            onClick={() => setSelectedLevel(index)}
-                            type="button"
-                          >
-                            <strong>{caseIndex + 1}</strong>
-                            <small>단서 {levelSelectClueCount(item)}개</small>
-                          </button>
-                        );
-                      })}
+                          return (
+                            <button
+                              className={selected ? "is-selected" : ""}
+                              key={item.id}
+                              onClick={() => chooseLevelCase(index)}
+                              onDoubleClick={() => startRun(index)}
+                              type="button"
+                              title="두 번 누르면 바로 시작"
+                            >
+                              <strong>{caseIndex + 1}</strong>
+                              <small>단서 {levelSelectClueCount(item)}개</small>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </section>
                 );
@@ -2012,34 +2847,138 @@ function App() {
               </button>
               <button
                 className="arrow-action"
-                disabled={phase === "scenario"}
+                disabled={
+                  phase === "scenario" &&
+                  ((practiceMode && practiceIndex === 0) || (!practiceMode && results.length === 0 && !reviewResult))
+                }
                 onClick={goPreviousPage}
                 type="button"
-                title="이전 단계"
+                title={phase === "scenario" && practiceMode ? "이전 실전문제" : phase === "scenario" ? "이전 결과" : "이전 단계"}
               >
                 <ChevronLeft size={22} aria-hidden="true" />
               </button>
               <div>
-                <span>LEVEL {level.level}</span>
+                <span>{practiceMode ? `실전 ${practiceIndex + 1}/${PRACTICE_LEVELS.length}` : `LEVEL ${level.level}`}</span>
                 <strong>{level.title}</strong>
               </div>
               <button className="arrow-action" onClick={goNextPage} type="button" title="다음 단계">
                 <ChevronRight size={22} aria-hidden="true" />
               </button>
-              <div className="score-pill">
-                <Trophy size={16} aria-hidden="true" />
-                {formatNumber(sessionScore)}
-              </div>
+              {practiceMode ? (
+                <div className="practice-pill">
+                  <ClipboardList size={16} aria-hidden="true" />
+                  실전
+                </div>
+              ) : (
+                <div className="score-pill">
+                  <Trophy size={16} aria-hidden="true" />
+                  {formatNumber(sessionScore)}
+                </div>
+              )}
             </header>
 
             <div className="progress-wrap" aria-label="전체 진행률">
-              <span>{levelIndex + 1}/{LEVELS.length}</span>
+              <span>{currentCaseIndex + 1}/{totalCaseCount}</span>
               <div className="progress-line">
                 <i style={{ width: `${phaseProgressWidth}%` }} />
               </div>
             </div>
 
-            {phase === "scenario" && (
+            {reviewResult && (
+              <article className="calculation-panel previous-calculation-panel">
+                <div className="panel-heading">
+                  <ClipboardList size={20} aria-hidden="true" />
+                  <div>
+                    <span>이전 결과</span>
+                    <h2>{reviewResult.title}</h2>
+                  </div>
+                </div>
+
+                <dl className="calc-sheet">
+                  <div>
+                    <dt>지원구분</dt>
+                    <dd>{resultSupportTypeLabel(reviewResult.supportType)}</dd>
+                  </div>
+                  <div>
+                    <dt>대상채무</dt>
+                    <dd>{formatAmount(reviewResult.targetDebt)}</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      {maxLivingExpenseIncomeLabel(
+                        hasSecuredIncomeDeduction({
+                          income: reviewResult.income,
+                          repaymentBaseIncome: reviewResult.repaymentBaseIncome,
+                          securedPayment: reviewResult.securedPayment,
+                        }),
+                      )}
+                    </dt>
+                    <dd>
+                      <strong>{livingExpenseIncomeComparison(reviewResult.maxLivingExpense, reviewResult.repaymentBaseIncome)}</strong>
+                      <span>
+                        {maxRepaymentAvailabilityText(
+                          reviewResult.maxLivingExpense,
+                          reviewResult.repaymentBaseIncome,
+                          reviewResult.maxRepaymentMonths,
+                        )}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>생활비</dt>
+                    <dd>
+                      <span>{reviewResult.additionalLivingExpense > 0 ? "최대생활비 + 추가 인정생활비" : "소득 - 월납부액"}</span>
+                      <strong className="calc-formula-inline">
+                        {reviewResult.additionalLivingExpense > 0
+                          ? recognizedLivingExpenseFormulaText(
+                              reviewResult.maxLivingExpense,
+                              reviewResult.additionalLivingExpense,
+                              reviewResult.adjustedLivingExpense,
+                            )
+                          : livingExpenseFormulaText(
+                              reviewResult.repaymentBaseIncome,
+                              reviewResult.monthlyPayment,
+                              reviewResult.adjustedLivingExpense,
+                            )}
+                      </strong>
+                    </dd>
+                  </div>
+                  {reviewResult.additionalLivingExpense > 0 && (
+                    <div>
+                      <dt>월납부액</dt>
+                      <dd>
+                        <span>{reviewResult.securedPayment > 0 ? "남은소득 - 생활비" : "소득 - 생활비"}</span>
+                        <strong className="calc-formula-inline">
+                          {monthlyPaymentFormulaText(
+                            reviewResult.repaymentBaseIncome,
+                            reviewResult.adjustedLivingExpense,
+                            reviewResult.monthlyPayment,
+                          )}
+                        </strong>
+                      </dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt>상환기간</dt>
+                    <dd>
+                      <span>{formatAmount(reviewResult.targetDebt)} 월 {formatAmount(reviewResult.monthlyPayment)} 납부시 기간</span>
+                      <strong>= {reviewResult.repaymentPeriod}개월</strong>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>오답</dt>
+                    <dd>{reviewResult.mistakes}회</dd>
+                  </div>
+                  <div>
+                    <dt>점수</dt>
+                    <dd>{formatNumber(reviewResult.score)}점</dd>
+                  </div>
+                </dl>
+
+              </article>
+            )}
+
+            {!reviewResult && phase === "scenario" && (
               <article className="mission-panel">
                 <div className="panel-heading">
                   <ClipboardList size={20} aria-hidden="true" />
@@ -2049,11 +2988,16 @@ function App() {
                 </div>
 
                 <p className="scenario-find-prompt">{scenarioPrompt}</p>
+                {practiceMode && (
+                  <p className="practice-scenario-tip">
+                    줄글 속 현재 항목만 직접 누릅니다. 제외 가족이나 설명용 단서는 누르면 오답입니다.
+                  </p>
+                )}
 
-                <div className="customer-log">
-                  {level.scenario.map((line) => {
+                <div className={`customer-log ${practiceMode ? "is-story" : ""}`}>
+                  {scenarioDisplayLines.map((line, index) => {
                     return (
-                      <div className={isScenarioLineComplete(line) ? "is-found" : ""} key={line}>
+                      <div className={isScenarioLineComplete(line) ? "is-found" : ""} key={`${index}-${line}`}>
                         {renderScenarioLine(line)}
                       </div>
                     );
@@ -2064,7 +3008,7 @@ function App() {
                   {screenProgress.map((item) => (
                     <button
                       className={`${item.done === item.total ? "is-complete" : ""} ${
-                        activeField.screen === item.screenName ? "is-active" : ""
+                        scenarioActiveField.screen === item.screenName ? "is-active" : ""
                       } ${clueFilterScreen === item.screenName ? "is-filtered" : ""}`}
                       key={item.screenName}
                       onClick={() => {
@@ -2092,7 +3036,7 @@ function App() {
               </article>
             )}
 
-            {phase === "intake" && (
+            {!reviewResult && phase === "intake" && (
               <article className="intake-panel">
                 <div className="system-tabs" aria-label="전산 화면 진행">
                   {screenProgress.map((item) => (
@@ -2179,47 +3123,76 @@ function App() {
               </article>
             )}
 
-            {phase === "calculation" && (
+            {!reviewResult && phase === "calculation" && (
               <article className="calculation-panel">
                 <dl className="calc-sheet">
                   <div>
                     <dt>지원구분</dt>
-                    <dd>{calculation.supportType}</dd>
+                    <dd>{resultSupportTypeLabel(calculation.supportType)}</dd>
                   </div>
                   <div>
                     <dt>대상채무</dt>
-                    <dd>{formatAmount(calculation.targetDebt)}</dd>
+                    <dd>
+                      {practiceMode ? <span>신용채무 합계</span> : null}
+                      <strong>{formatAmount(calculation.targetDebt)}</strong>
+                    </dd>
                   </div>
                   <div>
-                    <dt>최대 생활비</dt>
+                    <dt>
+                      {maxLivingExpenseIncomeLabel(
+                        hasCurrentSecuredIncomeDeduction,
+                      )}
+                    </dt>
                     <dd>
-                      {`최저생계비(${calculation.householdMembers}인 가구) x 150% = ${formatAmount(calculation.maxLivingExpense)}`}
+                      <strong>{livingExpenseIncomeComparison(calculation.maxLivingExpense, calculation.repaymentBaseIncome)}</strong>
+                      <span>
+                        {maxRepaymentAvailabilityText(
+                          calculation.maxLivingExpense,
+                          calculation.repaymentBaseIncome,
+                          calculation.maxRepaymentMonths,
+                        )}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>생활비</dt>
+                    <dd>
+                      <span>{calculation.additionalLivingExpense > 0 ? "최대생활비 + 추가 인정생활비" : hasCurrentSecuredIncomeDeduction ? "남은 소득 - 월납부액" : "소득 - 월납부액"}</span>
+                      <strong className="calc-formula-inline">
+                        {calculation.additionalLivingExpense > 0
+                          ? recognizedLivingExpenseFormulaText(
+                              calculation.maxLivingExpense,
+                              calculation.additionalLivingExpense,
+                              calculation.adjustedLivingExpense,
+                            )
+                          : livingExpenseFormulaText(
+                              calculation.repaymentBaseIncome,
+                              calculation.monthlyPayment,
+                              calculation.adjustedLivingExpense,
+                            )}
+                      </strong>
                     </dd>
                   </div>
                   {calculation.additionalLivingExpense > 0 && (
                     <div>
-                      <dt>추가인정 생활비</dt>
-                      <dd>{formatAmount(calculation.additionalLivingExpense)}</dd>
+                      <dt>월납부액</dt>
+                      <dd>
+                        <span>{hasCurrentSecuredIncomeDeduction ? "남은소득 - 생활비" : "소득 - 생활비"}</span>
+                        <strong className="calc-formula-inline">
+                          {monthlyPaymentFormulaText(
+                            calculation.repaymentBaseIncome,
+                            calculation.adjustedLivingExpense,
+                            calculation.monthlyPayment,
+                          )}
+                        </strong>
+                      </dd>
                     </div>
                   )}
                   <div>
-                    <dt>생활비</dt>
-                    <dd>{formatAmount(calculation.adjustedLivingExpense)}</dd>
-                  </div>
-                  <div>
-                    <dt>월납부액</dt>
-                    <dd>
-                      <span>{calculation.securedPayment > 0 ? "남은 소득 - 생활비" : "소득 - 생활비"}</span>
-                      <strong>
-                        {formatAmount(calculation.repaymentBaseIncome)} - {formatAmount(calculation.adjustedLivingExpense)} = {formatAmount(calculation.monthlyPayment)}
-                      </strong>
-                    </dd>
-                  </div>
-                  <div>
                     <dt>상환기간</dt>
                     <dd>
-                      <span>{calculation.annualInterestRate > 0 ? "대상채무 · 월납부액 · 이자율" : "대상채무 / 월납부액"}</span>
-                      <strong>{repaymentPeriodFormulaText(calculation)}</strong>
+                      <span>{formatAmount(calculation.targetDebt)} 월 {formatAmount(calculation.monthlyPayment)} 납부시 기간</span>
+                      <strong>= {calculation.repaymentPeriod}개월</strong>
                     </dd>
                   </div>
                   <div>
@@ -2228,27 +3201,29 @@ function App() {
                   </div>
                 </dl>
 
-                <div className="score-preview-card" aria-label={`이번 문항 점수 ${currentLevelScore}점`}>
-                  <div>
-                    <span>이번 문항 점수</span>
-                    <strong>{formatNumber(currentLevelScore)}점</strong>
+                {!practiceMode && (
+                  <div className="score-preview-card" aria-label={`이번 문항 점수 ${scoreWithMax(currentLevelScore, maxLevelScore)}`}>
+                    <div>
+                      <span>이번 문항 점수</span>
+                      <strong>{scoreWithMax(currentLevelScore, maxLevelScore)}</strong>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button
                   className="primary-action"
                   onClick={() => {
-                    finishLevel(levelIndex === LEVELS.length - 1 ? "result" : "next");
+                    finishLevel(practiceMode ? (isLastPracticeLevel ? "result" : "next") : levelIndex === LEVELS.length - 1 ? "result" : "next");
                   }}
                   type="button"
                 >
                   <ChevronRight size={19} aria-hidden="true" />
-                  {levelIndex === LEVELS.length - 1 ? "결과 보기" : "다음 레벨"}
+                  {practiceMode ? (isLastPracticeLevel ? "실전 종료" : "다음 실전문제") : levelIndex === LEVELS.length - 1 ? "결과 보기" : "다음 레벨"}
                 </button>
               </article>
             )}
 
-            {phase === "mission" && (
+            {!reviewResult && phase === "mission" && (
               <article className="mission-panel final-mission">
                 <div className="panel-heading">
                   <Trophy size={21} aria-hidden="true" />
@@ -2355,7 +3330,7 @@ function App() {
                       )}
                     </div>
 
-                    {calculation.securedPayment > 0 && (
+                    {hasCurrentSecuredIncomeDeduction && (
                       <div className="secured-income-card">
                         <span>담보채무 차감</span>
                         <strong>
@@ -2368,7 +3343,7 @@ function App() {
                     <div className="income-balance-card">
                       <div className="balance-head">
                         <strong>생활비와 월납부액 찾기</strong>
-                        <span>{calculation.securedPayment > 0 ? "남은 소득" : "총 소득"} {formatAmount(calculation.repaymentBaseIncome)}</span>
+                        <span>{hasCurrentSecuredIncomeDeduction ? "남은 소득" : "총 소득"} {formatAmount(calculation.repaymentBaseIncome)}</span>
                       </div>
                       <div className="balance-values">
                         <span>월납부액 {formatAmount(repaymentModel.monthlyPayment)}</span>
@@ -2432,7 +3407,6 @@ function App() {
             <div className="result-medal">
               <Trophy size={38} aria-hidden="true" />
             </div>
-            <span className="eyebrow">교육 클리어</span>
             <h1>{formatNumber(sessionScore)}점</h1>
             <p>소득, 가족, 주거, 재산, 채무현황, 추가인정 생활비 흐름을 모두 확인했습니다.</p>
 
@@ -2440,7 +3414,7 @@ function App() {
               {results.map((item) => (
                 <div key={`${item.level}-${item.title}`}>
                   <span>LEVEL {item.level} · {item.title}</span>
-                  <strong>{formatNumber(item.score)}점</strong>
+                  <strong>{scoreWithMax(item.score, item.maxScore)}</strong>
                   <small>오답 {item.mistakes}회</small>
                 </div>
               ))}
@@ -2456,6 +3430,17 @@ function App() {
                 시작 화면
               </button>
             </div>
+            <button
+              className="practice-result-action"
+              disabled={!canStartPractice}
+              onClick={startPracticeRun}
+              title={canStartPractice ? "실전문제 접수" : "마스터여우 달성 시 열립니다"}
+              type="button"
+            >
+              <ClipboardList size={19} aria-hidden="true" />
+              실전문제 접수
+            </button>
+            {!canStartPractice && <small className="practice-lock-note">마스터여우 달성 시 열립니다.</small>}
           </section>
         )}
       </main>
@@ -2504,6 +3489,36 @@ function App() {
         </div>
       )}
 
+      {screen === "result" && tierPopupOpen && (
+        <div className="sheet-backdrop tier-backdrop" role="presentation" onClick={() => setTierPopupOpen(false)}>
+          <section
+            className="bottom-sheet fox-tier-popup"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`최종 티어 ${resultTier.name}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button className="sheet-close tier-close" onClick={() => setTierPopupOpen(false)} type="button" title="닫기">
+              <X size={22} aria-hidden="true" />
+            </button>
+            <div className="fox-tier-head">
+              <strong>
+                <em aria-hidden="true">{resultTier.icon}</em>
+                {resultTier.name}
+              </strong>
+              <small>{resultTierPercent}% 달성</small>
+            </div>
+            <p className="fox-tier-copy">{resultTier.description}</p>
+            <div className="fox-tier-progress" aria-hidden="true">
+              <i style={{ width: `${resultTierPercent}%` }} />
+            </div>
+            <button className="primary-action" onClick={() => setTierPopupOpen(false)} type="button">
+              확인
+            </button>
+          </section>
+        </div>
+      )}
+
       {scenarioOpen && (
         <div className="sheet-backdrop" role="presentation" onClick={() => setScenarioOpen(false)}>
           <section className="bottom-sheet scenario-sheet" role="dialog" aria-modal="true" aria-label="시나리오 다시보기" onClick={(event) => event.stopPropagation()}>
@@ -2517,6 +3532,12 @@ function App() {
               </button>
             </div>
             <div className="scenario-list">
+              {level.narrative && (
+                <p className="scenario-narrative">
+                  <strong>전체 상담 내용</strong>
+                  {level.narrative}
+                </p>
+              )}
               {level.scenario.map((line) => (
                 <p key={line}>{line}</p>
               ))}
@@ -2653,7 +3674,7 @@ function App() {
             <div className="score-sheet-head">
               <span>접수 완료</span>
               <h2>이번 문항 점수</h2>
-              <strong>{formatNumber(currentLevelScore)}점</strong>
+              <strong>{scoreWithMax(currentLevelScore, maxLevelScore)}</strong>
             </div>
 
             <div className="score-stars score-stars-large" aria-label={`별 ${currentStarCount}개`}>

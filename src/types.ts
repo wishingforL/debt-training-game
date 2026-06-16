@@ -25,6 +25,13 @@ export type IntakeField = {
   options?: FieldOption[];
 };
 
+export type DecoyClue = {
+  clue: string;
+  label: string;
+  reason: string;
+  screen: ScreenName;
+};
+
 export type MissionAnswer = {
   supportType: string;
   monthlyPayment: number;
@@ -37,6 +44,8 @@ export type LevelData = {
   title: string;
   badge: string;
   goal: string;
+  narrative?: string;
+  decoys?: DecoyClue[];
   scenario: string[];
   fields: IntakeField[];
   systemScreens: ScreenName[];
@@ -60,4 +69,17 @@ export type LevelResult = {
   title: string;
   mistakes: number;
   score: number;
+  maxScore: number;
+  supportType: string;
+  income: number;
+  targetDebt: number;
+  maxLivingExpense: number;
+  additionalLivingExpense: number;
+  adjustedLivingExpense: number;
+  securedPayment: number;
+  repaymentBaseIncome: number;
+  monthlyPayment: number;
+  repaymentPeriod: number;
+  maxRepaymentMonths: number;
+  repaymentFormula: string;
 };
