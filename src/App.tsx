@@ -13,7 +13,7 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   calculateLevel,
   formatMoney,
@@ -161,7 +161,7 @@ const TUTORIAL_CHIP_EXAMPLES: Record<string, Record<string, string>> = {
   },
   최종미션: {
     생활비: "소득에서 보호할 생활비를 먼저 남깁니다.",
-    월납부액: "남은 소득을 10천원 단위로 반올림해 월납부액으로 봅니다.",
+    월납부액: "남은소득을 10천원 단위로 반올림해 월납부액으로 봅니다.",
     상환기간: "채무 금액과 지원구분별 계산 기준으로 상환기간을 확인합니다.",
     추가인정: "레벨 5부터는 주거비, 교육비, 의료비, 기타 추가인정 생활비를 반영합니다.",
   },
@@ -208,7 +208,7 @@ const FOX_TIERS = [
     icon: "👑",
     minRatio: 0.9,
     name: "마스터여우",
-    description: "어떤 사례도 해결할 수 있는 최고의 심사여우",
+    description: "어떤 사례도 해결할 수 있는 최고",
   },
 ];
 
@@ -272,8 +272,77 @@ function canUseMaxRepaymentPeriod(maxLivingExpense: number, income: number) {
 }
 
 function maxRepaymentAvailabilityText(maxLivingExpense: number, income: number, maxRepaymentMonths: number) {
-  const status = canUseMaxRepaymentPeriod(maxLivingExpense, income) ? "가능" : "불가";
+  const status = canUseMaxRepaymentPeriod(maxLivingExpense, income) ? "가능" : "추가 검증 필요";
   return `최대 상환기간(${maxRepaymentMonths}개월) ${status}`;
+}
+
+type MaxRepaymentReviewData = {
+  additionalLivingExpense: number;
+  annualInterestRate?: number;
+  maxLivingExpense: number;
+  maxRepaymentMonths: number;
+  repaymentBaseIncome: number;
+  supportType: string;
+  targetDebt: number;
+};
+
+function annualInterestRateForSupport(supportType: string, fallback = 0) {
+  const annualInterestRateBySupportType: Record<string, number> = {
+    신속채무조정: 0.11,
+    사전채무조정: 0.06,
+    개인워크아웃: 0,
+  };
+
+  return annualInterestRateBySupportType[supportType] ?? fallback;
+}
+
+function maxPeriodMonthlyPaymentFor(data: MaxRepaymentReviewData) {
+  const annualInterestRate = data.annualInterestRate ?? annualInterestRateForSupport(data.supportType);
+  return Math.round(paymentForMonths(data.targetDebt, data.maxRepaymentMonths, annualInterestRate / 12));
+}
+
+function maxPeriodPaymentFormulaText(data: MaxRepaymentReviewData) {
+  const methodLabel = (data.annualInterestRate ?? annualInterestRateForSupport(data.supportType)) > 0 ? "원리금" : "원금";
+
+  return `${formatAmount(data.targetDebt)} ${data.maxRepaymentMonths}개월 ${methodLabel} 분할\n= ${formatAmount(maxPeriodMonthlyPaymentFor(data))}`;
+}
+
+function recognizedMaxLivingExpenseFor(data: MaxRepaymentReviewData) {
+  return round1(data.maxLivingExpense + data.additionalLivingExpense);
+}
+
+function needsMaxRepaymentVerification(data: MaxRepaymentReviewData) {
+  return !canUseMaxRepaymentPeriod(data.maxLivingExpense, data.repaymentBaseIncome);
+}
+
+function maxRepaymentVerificationValue(data: MaxRepaymentReviewData) {
+  return round1(
+    data.repaymentBaseIncome -
+      recognizedMaxLivingExpenseFor(data) -
+      maxPeriodMonthlyPaymentFor(data),
+  );
+}
+
+function maxRepaymentVerificationLabel(data: MaxRepaymentReviewData) {
+  return data.additionalLivingExpense > 0
+    ? "소득 - (최대생활비 + 추가인정 생활비) - 최장기간 월납부액"
+    : "소득 - 최대생활비 - 최장기간 월납부액";
+}
+
+function maxRepaymentVerificationFormulaText(data: MaxRepaymentReviewData) {
+  const value = maxRepaymentVerificationValue(data);
+
+  return `${formatAmount(data.repaymentBaseIncome)} - ${formatAmount(recognizedMaxLivingExpenseFor(data))} - ${formatAmount(maxPeriodMonthlyPaymentFor(data))} ${comparisonSign(value)} 0`;
+}
+
+function isMaxRepaymentVerifiedPossible(data: MaxRepaymentReviewData) {
+  return maxRepaymentVerificationValue(data) <= 0;
+}
+
+function maxRepaymentVerificationStatusText(data: MaxRepaymentReviewData) {
+  return `최대 상환기간(${data.maxRepaymentMonths}개월) ${
+    isMaxRepaymentVerifiedPossible(data) ? "가능" : "불가"
+  }`;
 }
 
 function livingExpenseFormulaText(baseIncome: number, monthlyPayment: number, livingExpense: number) {
@@ -531,8 +600,13 @@ function additionalLivingExpenseItems(level: LevelData): AdditionalLivingExpense
   if (level.level < 5) return [];
 
   const scenarioText = level.scenario.join(" ");
-  const isSeoul = stringAnswer(level, "residenceArea") === "서울" || scenarioText.includes("서울");
-  const hasCollegeChild = scenarioText.includes("대학생");
+  const isPracticeCase = Boolean(level.narrative);
+  const isSeoul = isPracticeCase
+    ? stringAnswer(level, "residenceArea") === "서울"
+    : stringAnswer(level, "residenceArea") === "서울" || scenarioText.includes("서울");
+  const hasCollegeChild = isPracticeCase
+    ? level.fields.some((field) => field.key.includes("collegeChild") && typeof field.answer === "number" && field.answer > 0)
+    : scenarioText.includes("대학생");
   const medicalExpense = numericAnswer(level, "medicalExpense");
   const dependents = numericAnswer(level, "dependents") || numericAnswers(level, "dependent");
   const isSingleHousehold = dependents === 0 && scenarioText.includes("미혼");
@@ -610,6 +684,7 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
   }
 
   if (field.key === "hasVehicle" && line.includes("차량")) {
+    if (line.includes("본인 명의 차량")) return "본인 명의 차량";
     if (line.includes("차량 한 대")) return "차량 한 대";
     return "차량";
   }
@@ -770,11 +845,11 @@ function practiceFieldHint(field: IntakeField, level: LevelData) {
   }
 
   if (field.screen === "채무현황") {
-    notes.push("신용채무, 담보채무, 담보 원리금은 서로 역할이 다릅니다. 월납부액 산정 대상은 신용채무이고, 담보 원리금이나 이자는 남은 소득 계산에만 반영합니다.");
+    notes.push("신용채무, 담보채무, 담보 원리금은 서로 역할이 다릅니다. 월납부액 산정 대상은 신용채무이고, 담보 원리금이나 이자는 남은소득 계산에만 반영합니다.");
   }
 
   if (field.screen === "특이사항") {
-    notes.push("채무가 늘어난 사유와 추가인정 생활비 단서를 구분해서 확인합니다.");
+    notes.push("추가인정 생활비로 반영되는 정기 지출 단서만 확인합니다.");
   }
 
   if (field.screen === "주거") {
@@ -827,7 +902,7 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
     repaymentBaseIncome: calculation.repaymentBaseIncome,
     securedPayment: calculation.securedPayment,
   });
-  const incomeLabel = usesSecuredDeduction ? "남은 소득" : "소득";
+  const incomeLabel = usesSecuredDeduction ? "남은소득" : "소득";
   const livingLines =
     level.level >= 5
       ? [
@@ -847,7 +922,7 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
     "",
     "2. 월납부액: 10천원 단위로 반올림하여 산출",
     usesSecuredDeduction
-      ? `남은 소득: 총 소득 ${formatAmount(calculation.income)} - 담보 원리금 ${formatAmount(calculation.securedPayment)} = ${formatAmount(calculation.repaymentBaseIncome)}`
+      ? `남은소득: 총 소득 ${formatAmount(calculation.income)} - 담보 원리금 ${formatAmount(calculation.securedPayment)} = ${formatAmount(calculation.repaymentBaseIncome)}`
       : `소득: ${formatAmount(calculation.income)}`,
     ...livingLines,
     `${incomeLabel} ${formatAmount(calculation.repaymentBaseIncome)} - 생활비 ${formatAmount(calculation.adjustedLivingExpense)} = 월납부액 ${formatAmount(calculation.monthlyPayment)}`,
@@ -861,7 +936,7 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
           "실전 정리",
           "인정 부양가족만 가구수에 반영합니다.",
           "대상채무는 신용채무 합계입니다.",
-          "담보 원리금이나 이자는 남은 소득 계산에서 먼저 차감합니다.",
+          "담보 원리금이나 이자는 남은소득 계산에서 먼저 차감합니다.",
           "원리금상환 방식은 이자율을 반영해 상환기간을 계산합니다.",
         ]
       : []),
@@ -879,10 +954,10 @@ function missionAnswerText(calculation: CalculationResult) {
 
 function repaymentPeriodFormulaText(calculation: CalculationResult) {
   if (calculation.annualInterestRate > 0) {
-    return `${formatAmount(calculation.targetDebt)}, ${calculation.maxRepaymentMonths}개월 원리금 납부\n= ${formatAmount(calculation.monthlyPayment)}`;
+    return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원리금 분할\n= 월 ${formatAmount(calculation.monthlyPayment)}`;
   }
 
-  return `${formatAmount(calculation.targetDebt)}, ${calculation.maxRepaymentMonths}개월 원금 납부\n= ${formatAmount(calculation.monthlyPayment)}`;
+  return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원금 분할\n= 월 ${formatAmount(calculation.monthlyPayment)}`;
 }
 
 function supportOptionMeta(option: string) {
@@ -896,12 +971,17 @@ function supportOptionMeta(option: string) {
 }
 
 function resultSupportTypeLabel(option: string) {
-  if (option !== "사전채무조정") return option;
+  const noteBySupportType: Record<string, string> = {
+    신속채무조정: "평균 이자 11% 가정",
+    사전채무조정: "평균 이자 6% 가정",
+  };
+  const note = noteBySupportType[option];
+  if (!note) return option;
 
   return (
     <>
-      사전채무조정
-      <small className="support-rate-note">(평균 이자 6% 가정)</small>
+      {option}
+      <small className="support-rate-note">({note})</small>
     </>
   );
 }
@@ -955,17 +1035,21 @@ function App() {
   });
   const [repaymentDraft, setRepaymentDraft] = useState<number | null>(null);
   const [tutorialPayment, setTutorialPayment] = useState(50);
+  const [tutorialMiniPayment, setTutorialMiniPayment] = useState(250);
   const [missionPage, setMissionPage] = useState<0 | 1>(0);
   const [homeChoiceOpen, setHomeChoiceOpen] = useState(false);
   const [reviewResult, setReviewResult] = useState<LevelResult | null>(null);
   const [showAllClues, setShowAllClues] = useState(false);
   const [clueFilterScreen, setClueFilterScreen] = useState<string | null>(null);
+  const [lastClueScreen, setLastClueScreen] = useState<string | null>(null);
   const [livingDependentsDraft, setLivingDependentsDraft] = useState<number | null>(null);
   const [scorePopupOpen, setScorePopupOpen] = useState(false);
   const [tierPopupOpen, setTierPopupOpen] = useState(false);
   const [clueReviewOpen, setClueReviewOpen] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
   const [practiceIndex, setPracticeIndex] = useState(0);
+  const previousAllCluesFoundRef = useRef(false);
+  const supportSelectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const level = practiceMode ? PRACTICE_LEVELS[practiceIndex] ?? PRACTICE_LEVELS[0] : LEVELS[levelIndex];
   const calculation = useMemo(() => calculateLevel(level), [level]);
@@ -1093,6 +1177,22 @@ function App() {
     activeField ? level.fields.filter((field) => field.screen === activeField.screen) : [];
   const usesGroupedScreen = groupedScreenFields.length > 1;
   const allCluesFound = level.fields.every((field) => solved[field.key]);
+
+  useEffect(() => {
+    const justCompleted = allCluesFound && !previousAllCluesFoundRef.current;
+    previousAllCluesFoundRef.current = allCluesFound;
+
+    if (!justCompleted || screen !== "game" || phase !== "scenario" || reviewResult) return;
+
+    requestAnimationFrame(() => {
+      supportSelectionButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }, [allCluesFound, phase, reviewResult, screen]);
+
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
   const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
   const totalCaseCount = practiceMode ? PRACTICE_LEVELS.length : LEVELS.length;
@@ -1173,9 +1273,10 @@ function App() {
   const visibleClueGroups = useMemo(() => {
     if (showAllClues) return clueSummaryGroups;
     if (clueFilterScreen) return screenClueGroups.filter((group) => group.screenName === clueFilterScreen);
+    if (lastClueScreen) return screenClueGroups.filter((group) => group.screenName === lastClueScreen);
 
     return focusedClueGroups;
-  }, [clueFilterScreen, clueSummaryGroups, focusedClueGroups, screenClueGroups, showAllClues]);
+  }, [clueFilterScreen, clueSummaryGroups, focusedClueGroups, lastClueScreen, screenClueGroups, showAllClues]);
 
   const scenarioPrompt = useMemo(() => {
     if (allCluesFound) return "모든 단서를 찾았습니다.";
@@ -1188,8 +1289,8 @@ function App() {
   }, [activeScenarioTargets, allCluesFound, practiceMode, scenarioActiveField, solved]);
 
   const scenarioDisplayLines = useMemo(() => {
-    return practiceMode ? [level.scenario.join(" ")] : level.scenario;
-  }, [level.scenario, practiceMode]);
+    return practiceMode ? [level.narrative ?? level.scenario.join(" ")] : level.scenario;
+  }, [level.narrative, level.scenario, practiceMode]);
 
   const entryItems = useMemo(() => {
     const groupedScreens = new Set<string>();
@@ -1262,6 +1363,7 @@ function App() {
     setReviewResult(null);
     setShowAllClues(false);
     setClueFilterScreen(null);
+    setLastClueScreen(null);
     setLivingDependentsDraft(null);
     setScorePopupOpen(false);
     setTierPopupOpen(false);
@@ -1469,6 +1571,13 @@ function App() {
   }
 
   function handleScenarioFieldsTap(fields: IntakeField[]) {
+    const tappedScreen = fields[0]?.screen ?? null;
+    if (tappedScreen) {
+      setShowAllClues(false);
+      setClueFilterScreen(tappedScreen);
+      setLastClueScreen(tappedScreen);
+    }
+
     const candidates = activeScenarioTargets.filter((field) => !solved[field.key]);
 
     if (level.fields.every((field) => solved[field.key])) {
@@ -1874,7 +1983,7 @@ function App() {
       if (chip === "최종미션") {
         return (
           <div className="tutorial-mini-shot tutorial-mini-balance" aria-label={`${chip} 진행 화면 예시`}>
-            <div>
+            <div className="tutorial-mini-balance-head">
               <strong>월납부액 250천원</strong>
               <strong>생활비 2,250천원</strong>
             </div>
@@ -1901,7 +2010,7 @@ function App() {
       if (chip === "텍스트 터치") {
         return (
           <div className="tutorial-mini-shot tutorial-mini-scenario" aria-label={`${chip} 진행 화면 예시`}>
-            <p>월 <button className="tutorial-mini-token" type="button">2,500천원</button> 벌고 있습니다.</p>
+            <p><button className="tutorial-mini-token" type="button">월 2,500천원</button> 벌고 있습니다.</p>
             <strong>문장 안의 단서를 직접 누릅니다.</strong>
           </div>
         );
@@ -2016,14 +2125,36 @@ function App() {
         );
       }
 
+      const miniIncome = 2500;
+      const miniDebt = 24000;
+      const miniLivingExpense = Math.max(0, miniIncome - tutorialMiniPayment);
+      const miniRepaymentPeriod = tutorialMiniPayment > 0 ? Math.ceil(miniDebt / tutorialMiniPayment) : null;
+      const miniRatio = miniIncome > 0 ? (tutorialMiniPayment / miniIncome) * 100 : 0;
+
       return (
         <div className="tutorial-mini-shot tutorial-mini-balance" aria-label={`${chip} 진행 화면 예시`}>
-          <div>
-            <strong>월납부액 250천원</strong>
-            <strong>생활비 2,250천원</strong>
+          <div className="tutorial-mini-balance-head">
+            <strong>월납부액 {formatAmount(tutorialMiniPayment)}</strong>
+            <strong>생활비 {formatAmount(miniLivingExpense)}</strong>
           </div>
-          <i aria-hidden="true" />
-          <p>상환기간 96개월</p>
+          <div
+            className="balance-bar tutorial-mini-balance-bar"
+            style={{ "--payment-ratio": `${miniRatio}%` } as CSSProperties}
+          >
+            <span className="bar-payment" aria-hidden="true" />
+            <span className="bar-living" aria-hidden="true" />
+            <i aria-hidden="true" />
+            <input
+              aria-label="튜토리얼 월납부액과 생활비 조정"
+              max={miniIncome}
+              min="0"
+              onChange={(event) => setTutorialMiniPayment(Number(event.target.value))}
+              step="10"
+              type="range"
+              value={tutorialMiniPayment}
+            />
+          </div>
+          <p>상환기간 {miniRepaymentPeriod ? `${miniRepaymentPeriod}개월` : "계산불가"}</p>
         </div>
       );
     }
@@ -2866,7 +2997,6 @@ function App() {
               </button>
               {practiceMode ? (
                 <div className="practice-pill">
-                  <ClipboardList size={16} aria-hidden="true" />
                   실전
                 </div>
               ) : (
@@ -2924,12 +3054,68 @@ function App() {
                       </span>
                     </dd>
                   </div>
+                  {canUseMaxRepaymentPeriod(reviewResult.maxLivingExpense, reviewResult.repaymentBaseIncome) && (
+                    <div>
+                      <dt>월납부액</dt>
+                      <dd>
+                        <strong>{reviewResult.repaymentFormula}</strong>
+                      </dd>
+                    </div>
+                  )}
+                  {needsMaxRepaymentVerification(reviewResult) && (
+                    <>
+                      <div>
+                        <dt>
+                          <span>최장기간</span>
+                          <span>월납부액</span>
+                        </dt>
+                        <dd>
+                          <strong>{maxPeriodPaymentFormulaText(reviewResult)}</strong>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span>최대 상환</span>
+                          <span>기간 검토</span>
+                        </dt>
+                        <dd>
+                          <span>{maxRepaymentVerificationLabel(reviewResult)}</span>
+                          <strong className="calc-formula-inline calc-formula-tight">
+                            {maxRepaymentVerificationFormulaText(reviewResult)}
+                          </strong>
+                          <span>{maxRepaymentVerificationStatusText(reviewResult)}</span>
+                        </dd>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <dt>생활비</dt>
                     <dd>
-                      <span>{reviewResult.additionalLivingExpense > 0 ? "최대생활비 + 추가 인정생활비" : "소득 - 월납부액"}</span>
+                      <span>
+                        {canUseMaxRepaymentPeriod(reviewResult.maxLivingExpense, reviewResult.repaymentBaseIncome) ||
+                        (needsMaxRepaymentVerification(reviewResult) && isMaxRepaymentVerifiedPossible(reviewResult))
+                          ? hasSecuredIncomeDeduction({
+                              income: reviewResult.income,
+                              repaymentBaseIncome: reviewResult.repaymentBaseIncome,
+                              securedPayment: reviewResult.securedPayment,
+                            })
+                            ? "남은소득 - 월납부액"
+                            : "소득 - 월납부액"
+                          : reviewResult.additionalLivingExpense > 0
+                            ? "최대생활비 + 추가 인정생활비"
+                            : "소득 - 월납부액"}
+                      </span>
                       <strong className="calc-formula-inline">
-                        {reviewResult.additionalLivingExpense > 0
+                        {canUseMaxRepaymentPeriod(reviewResult.maxLivingExpense, reviewResult.repaymentBaseIncome) ||
+                        (needsMaxRepaymentVerification(reviewResult) && isMaxRepaymentVerifiedPossible(reviewResult))
+                          ? livingExpenseFormulaText(
+                              reviewResult.repaymentBaseIncome,
+                              needsMaxRepaymentVerification(reviewResult)
+                                ? maxPeriodMonthlyPaymentFor(reviewResult)
+                                : reviewResult.monthlyPayment,
+                              reviewResult.adjustedLivingExpense,
+                            )
+                          : reviewResult.additionalLivingExpense > 0
                           ? recognizedLivingExpenseFormulaText(
                               reviewResult.maxLivingExpense,
                               reviewResult.additionalLivingExpense,
@@ -2943,7 +3129,7 @@ function App() {
                       </strong>
                     </dd>
                   </div>
-                  {reviewResult.additionalLivingExpense > 0 && (
+                  {needsMaxRepaymentVerification(reviewResult) && !isMaxRepaymentVerifiedPossible(reviewResult) && (
                     <div>
                       <dt>월납부액</dt>
                       <dd>
@@ -2958,13 +3144,15 @@ function App() {
                       </dd>
                     </div>
                   )}
-                  <div>
-                    <dt>상환기간</dt>
-                    <dd>
-                      <span>{formatAmount(reviewResult.targetDebt)} 월 {formatAmount(reviewResult.monthlyPayment)} 납부시 기간</span>
-                      <strong>= {reviewResult.repaymentPeriod}개월</strong>
-                    </dd>
-                  </div>
+                  {needsMaxRepaymentVerification(reviewResult) && !isMaxRepaymentVerifiedPossible(reviewResult) && (
+                    <div>
+                      <dt>상환기간</dt>
+                      <dd>
+                        <span>{formatAmount(reviewResult.targetDebt)} 월 {formatAmount(reviewResult.monthlyPayment)} 납부시 기간</span>
+                        <strong>= {reviewResult.repaymentPeriod}개월</strong>
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt>오답</dt>
                     <dd>{reviewResult.mistakes}회</dd>
@@ -3009,11 +3197,12 @@ function App() {
                     <button
                       className={`${item.done === item.total ? "is-complete" : ""} ${
                         scenarioActiveField.screen === item.screenName ? "is-active" : ""
-                      } ${clueFilterScreen === item.screenName ? "is-filtered" : ""}`}
+                      } ${(!showAllClues && (clueFilterScreen ?? lastClueScreen) === item.screenName) ? "is-filtered" : ""}`}
                       key={item.screenName}
                       onClick={() => {
                         setShowAllClues(false);
                         setClueFilterScreen(item.screenName);
+                        setLastClueScreen(item.screenName);
                       }}
                       type="button"
                     >
@@ -3027,6 +3216,7 @@ function App() {
 
                 <button
                   className="primary-action"
+                  ref={supportSelectionButtonRef}
                   onClick={moveToSupportSelection}
                   type="button"
                 >
@@ -3154,12 +3344,66 @@ function App() {
                       </span>
                     </dd>
                   </div>
+                  {canUseMaxRepaymentPeriod(calculation.maxLivingExpense, calculation.repaymentBaseIncome) && (
+                    <div>
+                      <dt>월납부액</dt>
+                      <dd>
+                        <strong>{repaymentPeriodFormulaText(calculation)}</strong>
+                      </dd>
+                    </div>
+                  )}
+                  {needsMaxRepaymentVerification(calculation) && (
+                    <>
+                      <div>
+                        <dt>
+                          <span>최장기간</span>
+                          <span>월납부액</span>
+                        </dt>
+                        <dd>
+                          <strong>{maxPeriodPaymentFormulaText(calculation)}</strong>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span>최대 상환</span>
+                          <span>기간 검토</span>
+                        </dt>
+                        <dd>
+                          <span>{maxRepaymentVerificationLabel(calculation)}</span>
+                          <strong className="calc-formula-inline calc-formula-tight">
+                            {maxRepaymentVerificationFormulaText(calculation)}
+                          </strong>
+                          <span>{maxRepaymentVerificationStatusText(calculation)}</span>
+                        </dd>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <dt>생활비</dt>
                     <dd>
-                      <span>{calculation.additionalLivingExpense > 0 ? "최대생활비 + 추가 인정생활비" : hasCurrentSecuredIncomeDeduction ? "남은 소득 - 월납부액" : "소득 - 월납부액"}</span>
+                      <span>
+                        {canUseMaxRepaymentPeriod(calculation.maxLivingExpense, calculation.repaymentBaseIncome) ||
+                        (needsMaxRepaymentVerification(calculation) && isMaxRepaymentVerifiedPossible(calculation))
+                          ? hasCurrentSecuredIncomeDeduction
+                            ? "남은소득 - 월납부액"
+                            : "소득 - 월납부액"
+                          : calculation.additionalLivingExpense > 0
+                            ? "최대생활비 + 추가 인정생활비"
+                            : hasCurrentSecuredIncomeDeduction
+                              ? "남은소득 - 월납부액"
+                              : "소득 - 월납부액"}
+                      </span>
                       <strong className="calc-formula-inline">
-                        {calculation.additionalLivingExpense > 0
+                        {canUseMaxRepaymentPeriod(calculation.maxLivingExpense, calculation.repaymentBaseIncome) ||
+                        (needsMaxRepaymentVerification(calculation) && isMaxRepaymentVerifiedPossible(calculation))
+                          ? livingExpenseFormulaText(
+                              calculation.repaymentBaseIncome,
+                              needsMaxRepaymentVerification(calculation)
+                                ? maxPeriodMonthlyPaymentFor(calculation)
+                                : calculation.monthlyPayment,
+                              calculation.adjustedLivingExpense,
+                            )
+                          : calculation.additionalLivingExpense > 0
                           ? recognizedLivingExpenseFormulaText(
                               calculation.maxLivingExpense,
                               calculation.additionalLivingExpense,
@@ -3173,7 +3417,7 @@ function App() {
                       </strong>
                     </dd>
                   </div>
-                  {calculation.additionalLivingExpense > 0 && (
+                  {needsMaxRepaymentVerification(calculation) && !isMaxRepaymentVerifiedPossible(calculation) && (
                     <div>
                       <dt>월납부액</dt>
                       <dd>
@@ -3188,13 +3432,15 @@ function App() {
                       </dd>
                     </div>
                   )}
-                  <div>
-                    <dt>상환기간</dt>
-                    <dd>
-                      <span>{formatAmount(calculation.targetDebt)} 월 {formatAmount(calculation.monthlyPayment)} 납부시 기간</span>
-                      <strong>= {calculation.repaymentPeriod}개월</strong>
-                    </dd>
-                  </div>
+                  {needsMaxRepaymentVerification(calculation) && !isMaxRepaymentVerifiedPossible(calculation) && (
+                    <div>
+                      <dt>상환기간</dt>
+                      <dd>
+                        <span>{formatAmount(calculation.targetDebt)} 월 {formatAmount(calculation.monthlyPayment)} 납부시 기간</span>
+                        <strong>= {calculation.repaymentPeriod}개월</strong>
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt>오답</dt>
                     <dd>{levelMistakes}회</dd>
@@ -3336,14 +3582,14 @@ function App() {
                         <strong>
                           총 소득 {formatAmount(calculation.income)} - 담보 원리금 {formatAmount(calculation.securedPayment)}
                         </strong>
-                        <em>남은 소득 {formatAmount(calculation.repaymentBaseIncome)}</em>
+                        <em>남은소득 {formatAmount(calculation.repaymentBaseIncome)}</em>
                       </div>
                     )}
 
                     <div className="income-balance-card">
                       <div className="balance-head">
                         <strong>생활비와 월납부액 찾기</strong>
-                        <span>{hasCurrentSecuredIncomeDeduction ? "남은 소득" : "총 소득"} {formatAmount(calculation.repaymentBaseIncome)}</span>
+                        <span>{hasCurrentSecuredIncomeDeduction ? "남은소득" : "총 소득"} {formatAmount(calculation.repaymentBaseIncome)}</span>
                       </div>
                       <div className="balance-values">
                         <span>월납부액 {formatAmount(repaymentModel.monthlyPayment)}</span>
@@ -3509,9 +3755,6 @@ function App() {
               <small>{resultTierPercent}% 달성</small>
             </div>
             <p className="fox-tier-copy">{resultTier.description}</p>
-            <div className="fox-tier-progress" aria-hidden="true">
-              <i style={{ width: `${resultTierPercent}%` }} />
-            </div>
             <button className="primary-action" onClick={() => setTierPopupOpen(false)} type="button">
               확인
             </button>
@@ -3532,15 +3775,16 @@ function App() {
               </button>
             </div>
             <div className="scenario-list">
-              {level.narrative && (
+              {level.narrative ? (
                 <p className="scenario-narrative">
                   <strong>전체 상담 내용</strong>
                   {level.narrative}
                 </p>
+              ) : (
+                level.scenario.map((line) => (
+                  <p key={line}>{line}</p>
+                ))
               )}
-              {level.scenario.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
             </div>
           </section>
         </div>

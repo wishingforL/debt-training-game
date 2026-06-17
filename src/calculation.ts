@@ -93,8 +93,13 @@ function additionalLivingExpenseForLevel(level: LevelData) {
   if (level.level < 5) return 0;
 
   const scenarioText = level.scenario.join(" ");
-  const isSeoul = stringField(level.fields, "residenceArea") === "서울" || scenarioText.includes("서울");
-  const hasCollegeChild = scenarioText.includes("대학생");
+  const isPracticeCase = Boolean(level.narrative);
+  const isSeoul = isPracticeCase
+    ? stringField(level.fields, "residenceArea") === "서울"
+    : stringField(level.fields, "residenceArea") === "서울" || scenarioText.includes("서울");
+  const hasCollegeChild = isPracticeCase
+    ? level.fields.some((field) => field.key.includes("collegeChild") && typeof field.answer === "number" && field.answer > 0)
+    : scenarioText.includes("대학생");
   const medicalExpense = numberField(level.fields, "medicalExpense");
   const dependents = numberField(level.fields, "dependents") || numberFields(level.fields, "dependent");
   const isSingleHousehold = dependents === 0 && scenarioText.includes("미혼");
