@@ -368,6 +368,73 @@ function maxLivingExpenseIncomeLabel(hasSecuredPayment: boolean) {
   );
 }
 
+type CalculationReasonData = MaxRepaymentReviewData & {
+  adjustedLivingExpense: number;
+  income: number;
+  monthlyPayment: number;
+  repaymentPeriod: number;
+  securedPayment: number;
+};
+
+function calculationReasonSteps(data: CalculationReasonData, overdueDays: number) {
+  const hasSecuredDeduction = hasSecuredIncomeDeduction(data);
+  const baseIncomeLabel = hasSecuredDeduction ? "남은소득" : "소득";
+  const maxPayment = maxPeriodMonthlyPaymentFor(data);
+  const usesMaxPeriodPayment =
+    canUseMaxRepaymentPeriod(data.maxLivingExpense, data.repaymentBaseIncome) ||
+    (needsMaxRepaymentVerification(data) && isMaxRepaymentVerifiedPossible(data));
+  const appliedMonthlyPayment = usesMaxPeriodPayment ? maxPayment : data.monthlyPayment;
+
+  return [
+    `연체 ${formatNumber(overdueDays)}일 기준으로 ${data.supportType}을 선택합니다.`,
+    hasSecuredDeduction
+      ? `담보 원리금 ${formatAmount(data.securedPayment)}을 먼저 차감해 ${baseIncomeLabel} ${formatAmount(data.repaymentBaseIncome)}을 기준으로 봅니다.`
+      : `${baseIncomeLabel} ${formatAmount(data.repaymentBaseIncome)}에서 생활비와 월납부액을 확인합니다.`,
+    data.additionalLivingExpense > 0
+      ? `최대생활비 ${formatAmount(data.maxLivingExpense)}에 추가인정 생활비 ${formatAmount(data.additionalLivingExpense)}을 반영합니다.`
+      : "가구수 기준 최대생활비와 소득을 비교해 최대 상환기간 가능 여부를 확인합니다.",
+    usesMaxPeriodPayment
+      ? `최대 상환기간 기준 월납부액 ${formatAmount(appliedMonthlyPayment)}을 적용하고 생활비 ${formatAmount(data.adjustedLivingExpense)}가 남는지 확인합니다.`
+      : `생활비 ${formatAmount(data.adjustedLivingExpense)}를 남긴 뒤 월납부액 ${formatAmount(data.monthlyPayment)}과 상환기간 ${data.repaymentPeriod}개월을 계산합니다.`,
+  ];
+}
+
+function renderCalculationAnswerCard(data: CalculationReasonData) {
+  return (
+    <section className="calc-answer-card" aria-label="최종 정답 요약">
+      <span>최종 정답</span>
+      <div>
+        <small>지원구분</small>
+        <strong>{resultSupportTypeLabel(data.supportType)}</strong>
+      </div>
+      <div>
+        <small>월납부액</small>
+        <strong>{formatAmount(data.monthlyPayment)}</strong>
+      </div>
+      <div>
+        <small>상환기간</small>
+        <strong>{data.repaymentPeriod}개월</strong>
+      </div>
+    </section>
+  );
+}
+
+function renderCalculationReasonCard(data: CalculationReasonData, overdueDays: number) {
+  return (
+    <section className="calc-reason-card" aria-label="정답 판단 요약">
+      <div>
+        <span>정답 판단</span>
+        <strong>왜 이 답인가요?</strong>
+      </div>
+      <ol>
+        {calculationReasonSteps(data, overdueDays).map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function hasSecuredIncomeDeduction({
   income,
   repaymentBaseIncome,
@@ -667,6 +734,10 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
     ?.map((prefix) => `${prefix} ${answerLabel}`)
     .find((label) => line.includes(label));
   if (prefixedLabel) return prefixedLabel;
+
+  if ((field.key === "unsecuredDebt" || field.key === "securedDebt") && line.includes(fieldClue(field))) {
+    return fieldClue(field).replace(/\.$/, "");
+  }
 
   if (field.key === "dependents" || field.key.startsWith("dependent.")) {
     if (Number(field.answer) === 0 && line.includes("미혼")) return "미혼";
@@ -1048,14 +1119,17 @@ function App() {
   const [clueReviewOpen, setClueReviewOpen] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
   const [practiceIndex, setPracticeIndex] = useState(0);
+  const [autoSolvedClueCount, setAutoSolvedClueCount] = useState(0);
   const previousAllCluesFoundRef = useRef(false);
   const supportSelectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const level = practiceMode ? PRACTICE_LEVELS[practiceIndex] ?? PRACTICE_LEVELS[0] : LEVELS[levelIndex];
   const calculation = useMemo(() => calculateLevel(level), [level]);
+  const expectedLivingDependents = Math.max(0, calculation.householdMembers - 1);
   const defaultLivingDependents = practiceMode ? 0 : Math.max(0, calculation.householdMembers - 1);
   const livingDependents = livingDependentsDraft ?? defaultLivingDependents;
   const livingBasis = useMemo(() => livingExpenseBasisForDependents(livingDependents), [livingDependents]);
+  const matchesLivingDependents = livingBasis.dependents === expectedLivingDependents;
   const extraLivingItems = useMemo(() => additionalLivingExpenseItems(level), [level]);
   const additionalLivingExpense = useMemo(
     () => round1(extraLivingItems.reduce((sum, item) => sum + item.amount, 0)),
@@ -1224,8 +1298,9 @@ function App() {
     });
   }, [level, orderedScreenNames, solved]);
   const foundClueCount = useMemo(() => level.fields.filter((field) => solved[field.key]).length, [level, solved]);
+  const scoredClueCount = Math.max(0, foundClueCount - autoSolvedClueCount);
   const maxLevelScore = levelMaxScoreFor(level);
-  const currentLevelScore = levelScoreFor(level, foundClueCount, levelMistakes);
+  const currentLevelScore = levelScoreFor(level, scoredClueCount, levelMistakes);
   const currentStarCount = Math.max(1, Math.min(5, Math.ceil((currentLevelScore / maxLevelScore) * 5)));
   const hasCurrentSecuredIncomeDeduction = hasSecuredIncomeDeduction({
     income: calculation.income,
@@ -1282,10 +1357,10 @@ function App() {
     if (allCluesFound) return "모든 단서를 찾았습니다.";
 
     const labels = uniqueValues(activeScenarioTargets.filter((field) => !solved[field.key]).map((field) => field.label));
-    const practiceSuffix = practiceMode ? " 인정 단서만 누르세요." : "";
-    if (labels.length === 0) return `${scenarioActiveField.screen} 단서를 찾아주세요.${practiceSuffix} (단어 클릭)`;
-    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요.${practiceSuffix} (단어 클릭)`;
-    return `${scenarioActiveField.screen} 단서를 찾아주세요. (단어 클릭)`;
+    const actionText = practiceMode ? "인정되는 단서만 누르세요." : "문장 속 단어를 누르세요.";
+    if (labels.length === 0) return `${scenarioActiveField.screen} 단서를 찾아주세요. ${actionText}`;
+    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요. ${actionText}`;
+    return `${scenarioActiveField.screen} 단서를 찾아주세요. ${actionText}`;
   }, [activeScenarioTargets, allCluesFound, practiceMode, scenarioActiveField, solved]);
 
   const scenarioDisplayLines = useMemo(() => {
@@ -1368,6 +1443,7 @@ function App() {
     setScorePopupOpen(false);
     setTierPopupOpen(false);
     setClueReviewOpen(false);
+    setAutoSolvedClueCount(0);
   }
 
   function startRun(startIndex = selectedLevel) {
@@ -1757,7 +1833,12 @@ function App() {
     const canShowAll = clueSummaryGroups.length > 1;
 
     return (
-      <div className={`found-clue-summary ${isFiltered ? "is-filtered" : "is-all"}`} aria-label="찾은 단서 정리">
+      <div
+        className={`found-clue-summary ${isFiltered ? "is-filtered" : "is-all"} ${
+          showAllClues ? "is-expanded" : "is-compact"
+        }`}
+        aria-label="찾은 단서 정리"
+      >
         <div className="found-summary-head">
           <span>찾은 단서</span>
           {showAllClues ? (
@@ -2371,7 +2452,10 @@ function App() {
     }
 
     if (phase === "scenario") {
+      const remainingClues = level.fields.filter((field) => !solved[field.key]).length;
+      setAutoSolvedClueCount((count) => count + remainingClues);
       solveAllClues();
+      setFeedback(remainingClues > 0 ? "상단 다음 버튼으로 남은 단서를 자동완료했습니다." : "");
       setMissionPage(0);
       setPhase("mission");
       return;
@@ -2463,6 +2547,7 @@ function App() {
                   monthlyPayment: String(calculation.mission.monthlyPayment),
                   repaymentPeriod: String(calculation.mission.repaymentPeriod),
                 });
+                setLivingDependentsDraft(expectedLivingDependents);
                 setRepaymentDraft(calculation.mission.monthlyPayment);
               }
           : undefined,
@@ -2581,6 +2666,7 @@ function App() {
     const mission = calculation.mission;
     const matchesMissionValues =
       missionDraft.supportType === mission.supportType &&
+      livingDependents === expectedLivingDependents &&
       Math.abs(monthlyPayment - mission.monthlyPayment) <= 0.05 &&
       repaymentPeriod === mission.repaymentPeriod;
     const isCorrect =
@@ -2595,7 +2681,13 @@ function App() {
       const nextAttempts = (wrongAttempts.mission ?? 0) + 1;
       setWrongAttempts((current) => ({ ...current, mission: nextAttempts }));
       setLevelMistakes((count) => count + 1);
-      setFeedback(nextAttempts >= 2 ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다." : "최종미션 힌트를 확인해 보세요.");
+      setFeedback(
+        !matchesLivingDependents
+          ? `부양가족 수를 다시 확인해 주세요. 이 문항은 부양가족 ${formatNumber(expectedLivingDependents)}명 기준입니다.`
+          : nextAttempts >= 2
+            ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다."
+            : "최종미션 힌트를 확인해 보세요.",
+      );
       showMissionAssist(nextAttempts);
       return;
     }
@@ -2996,8 +3088,9 @@ function App() {
                 <ChevronRight size={22} aria-hidden="true" />
               </button>
               {practiceMode ? (
-                <div className="practice-pill">
-                  실전
+                <div className="practice-pill" aria-label="실전문제">
+                  <ClipboardList size={15} aria-hidden="true" />
+                  <span>실전</span>
                 </div>
               ) : (
                 <div className="score-pill">
@@ -3175,7 +3268,10 @@ function App() {
                   </div>
                 </div>
 
-                <p className="scenario-find-prompt">{scenarioPrompt}</p>
+                <p className={`scenario-find-prompt ${practiceMode ? "is-practice" : ""}`}>
+                  <span>지금 찾을 단서</span>
+                  <strong>{scenarioPrompt}</strong>
+                </p>
                 {practiceMode && (
                   <p className="practice-scenario-tip">
                     줄글 속 현재 항목만 직접 누릅니다. 제외 가족이나 설명용 단서는 누르면 오답입니다.
@@ -3315,6 +3411,9 @@ function App() {
 
             {!reviewResult && phase === "calculation" && (
               <article className="calculation-panel">
+                {renderCalculationAnswerCard(calculation)}
+                {renderCalculationReasonCard(calculation, numericAnswer(level, "overdueDays"))}
+
                 <dl className="calc-sheet">
                   <div>
                     <dt>지원구분</dt>
@@ -3449,11 +3548,14 @@ function App() {
 
                 {!practiceMode && (
                   <div className="score-preview-card" aria-label={`이번 문항 점수 ${scoreWithMax(currentLevelScore, maxLevelScore)}`}>
-                    <div>
-                      <span>이번 문항 점수</span>
-                      <strong>{scoreWithMax(currentLevelScore, maxLevelScore)}</strong>
-                    </div>
+                  <div>
+                    <span>이번 문항 점수</span>
+                    <strong>{scoreWithMax(currentLevelScore, maxLevelScore)}</strong>
                   </div>
+                  {autoSolvedClueCount > 0 && (
+                    <p>자동완료 단서 {autoSolvedClueCount}개는 단서 점수에서 제외됩니다.</p>
+                  )}
+                </div>
                 )}
 
                 <button
@@ -3654,7 +3756,19 @@ function App() {
               <Trophy size={38} aria-hidden="true" />
             </div>
             <h1>{formatNumber(sessionScore)}점</h1>
-            <p>소득, 가족, 주거, 재산, 채무현황, 추가인정 생활비 흐름을 모두 확인했습니다.</p>
+            <p className="result-summary-copy">총 {scoreWithMax(sessionScore, resultMaxScore)} · {resultTier.name} 달성</p>
+
+            <article className="fox-tier-card result-tier-card" aria-label={`최종 티어 ${resultTier.name}`}>
+              <span>여우 성장 티어</span>
+              <div className="fox-tier-head">
+                <strong>
+                  <em aria-hidden="true">{resultTier.icon}</em>
+                  {resultTier.name}
+                </strong>
+                <small>{resultTierPercent}% 달성</small>
+              </div>
+              <p>{resultTier.description}</p>
+            </article>
 
             <div className="result-list">
               {results.map((item) => (
@@ -3932,7 +4046,8 @@ function App() {
             <div className="score-breakdown">
               <div>
                 <span>단서</span>
-                <strong>{foundClueCount}/{level.fields.length}</strong>
+                <strong>{scoredClueCount}/{level.fields.length}</strong>
+                {autoSolvedClueCount > 0 && <small>자동완료 {autoSolvedClueCount}개 제외</small>}
               </div>
               <div>
                 <span>오답</span>
