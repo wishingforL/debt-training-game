@@ -1144,29 +1144,12 @@ h2 {
 }
 
 .practice-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-width: 58px;
+  min-width: 56px;
   min-height: 42px;
-  padding: 0 8px;
-  color: #fff;
-  background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.18), transparent 30%),
-    #000;
-  border: 2px solid #000;
-  border-radius: 4px;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  line-height: 1;
-  white-space: nowrap;
+  padding-inline: 14px;
 }
 
 .practice-pill svg {
-  flex: 0 0 auto;
   stroke-width: 2.4;
 }
 
@@ -2249,7 +2232,7 @@ h2 {
 
 .calc-answer-card {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 14px;
   color: var(--ink);

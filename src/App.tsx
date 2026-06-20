@@ -175,6 +175,7 @@ const TUTORIAL_CHIP_EXAMPLES: Record<string, Record<string, string>> = {
 const emptyStats: StoredStats = {
   bestScore: 0,
   clearedLevel: 0,
+  practiceUnlocked: false,
   runs: 0,
   lastScore: 0,
 };
@@ -202,13 +203,13 @@ const FOX_TIERS = [
     icon: "🔍",
     minRatio: 0.75,
     name: "탐정여우",
-    description: "복잡한 사례 속 숨겨진 단서를 찾아내는 여우",
+    description: "복잡한 사례 속 숨겨진 단서를 찾아내는 능력자",
   },
   {
     icon: "👑",
     minRatio: 0.9,
     name: "마스터여우",
-    description: "어떤 사례도 해결할 수 있는 최고",
+    description: "어떤 사례도 해결할 수 있는 최고 능력자",
   },
 ];
 
@@ -349,6 +350,11 @@ function livingExpenseFormulaText(baseIncome: number, monthlyPayment: number, li
   return `${formatAmount(baseIncome)} - ${formatAmount(monthlyPayment)} = ${formatAmount(livingExpense)}`;
 }
 
+function dependentAnswerLabel(householdMembers: number) {
+  const dependents = Math.max(0, householdMembers - 1);
+  return `${formatNumber(dependents)}명 (${formatNumber(householdMembers)}인 가구)`;
+}
+
 function recognizedLivingExpenseFormulaText(maxLivingExpense: number, additionalLivingExpense: number, livingExpense: number) {
   return `${formatAmount(maxLivingExpense)} + ${formatAmount(additionalLivingExpense)} = ${formatAmount(livingExpense)}`;
 }
@@ -370,6 +376,7 @@ function maxLivingExpenseIncomeLabel(hasSecuredPayment: boolean) {
 
 type CalculationReasonData = MaxRepaymentReviewData & {
   adjustedLivingExpense: number;
+  householdMembers: number;
   income: number;
   monthlyPayment: number;
   repaymentPeriod: number;
@@ -387,15 +394,16 @@ function calculationReasonSteps(data: CalculationReasonData, overdueDays: number
 
   return [
     `연체 ${formatNumber(overdueDays)}일 기준으로 ${data.supportType}을 선택합니다.`,
+    `부양가족 ${dependentAnswerLabel(data.householdMembers)} 기준으로 생활비 범위를 확인합니다.`,
     hasSecuredDeduction
       ? `담보 원리금 ${formatAmount(data.securedPayment)}을 먼저 차감해 ${baseIncomeLabel} ${formatAmount(data.repaymentBaseIncome)}을 기준으로 봅니다.`
       : `${baseIncomeLabel} ${formatAmount(data.repaymentBaseIncome)}에서 생활비와 월납부액을 확인합니다.`,
     data.additionalLivingExpense > 0
-      ? `최대생활비 ${formatAmount(data.maxLivingExpense)}에 추가인정 생활비 ${formatAmount(data.additionalLivingExpense)}을 반영합니다.`
+      ? `최대생활비(${formatAmount(data.maxLivingExpense)})에 추가인정 생활비(${formatAmount(data.additionalLivingExpense)})을 더한 ${formatAmount(data.adjustedLivingExpense)}을 생활비로 반영합니다.`
       : "가구수 기준 최대생활비와 소득을 비교해 최대 상환기간 가능 여부를 확인합니다.",
     usesMaxPeriodPayment
-      ? `최대 상환기간 기준 월납부액 ${formatAmount(appliedMonthlyPayment)}을 적용하고 생활비 ${formatAmount(data.adjustedLivingExpense)}가 남는지 확인합니다.`
-      : `생활비 ${formatAmount(data.adjustedLivingExpense)}를 남긴 뒤 월납부액 ${formatAmount(data.monthlyPayment)}과 상환기간 ${data.repaymentPeriod}개월을 계산합니다.`,
+      ? `최대 상환기간의 월납부액 ${formatAmount(appliedMonthlyPayment)}을 적용하고 생활비 ${formatAmount(data.adjustedLivingExpense)}이 남는지 확인합니다.`
+      : `대상채무 ${formatAmount(data.targetDebt)}을 매월 ${formatAmount(data.monthlyPayment)}(월납부액, ${formatAmount(data.repaymentBaseIncome)} - ${formatAmount(data.adjustedLivingExpense)})으로 상환하면 ${data.repaymentPeriod}개월이 걸립니다.`,
   ];
 }
 
@@ -406,6 +414,10 @@ function renderCalculationAnswerCard(data: CalculationReasonData) {
       <div>
         <small>지원구분</small>
         <strong>{resultSupportTypeLabel(data.supportType)}</strong>
+      </div>
+      <div>
+        <small>부양가족</small>
+        <strong>{dependentAnswerLabel(data.householdMembers)}</strong>
       </div>
       <div>
         <small>월납부액</small>
@@ -423,7 +435,6 @@ function renderCalculationReasonCard(data: CalculationReasonData, overdueDays: n
   return (
     <section className="calc-reason-card" aria-label="정답 판단 요약">
       <div>
-        <span>정답 판단</span>
         <strong>왜 이 답인가요?</strong>
       </div>
       <ol>
@@ -715,6 +726,10 @@ function clueMarkerLabel(field: IntakeField) {
   return fieldValueLabel(field);
 }
 
+function compactDebtClueMarker(label: string) {
+  return label.replace(/^00\S+\s+/, "");
+}
+
 function scenarioMarkerLabel(field: IntakeField, line: string) {
   const answerLabel = clueMarkerLabel(field);
   const prefixedMoneyLabels: Record<string, string[]> = {
@@ -734,10 +749,6 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
     ?.map((prefix) => `${prefix} ${answerLabel}`)
     .find((label) => line.includes(label));
   if (prefixedLabel) return prefixedLabel;
-
-  if ((field.key === "unsecuredDebt" || field.key === "securedDebt") && line.includes(fieldClue(field))) {
-    return fieldClue(field).replace(/\.$/, "");
-  }
 
   if (field.key === "dependents" || field.key.startsWith("dependent.")) {
     if (Number(field.answer) === 0 && line.includes("미혼")) return "미혼";
@@ -786,7 +797,12 @@ function scenarioMarkerLabel(field: IntakeField, line: string) {
   }
 
   if (field.key === "securedDebt" && Number(field.answer) === 0 && line.includes("담보채무")) {
-    return "담보채무";
+    return line.includes("담보채무는 없습니다") ? "담보채무는 없습니다" : "담보채무";
+  }
+
+  if (field.key.startsWith("unsecuredDebt.") || field.key.startsWith("securedDebt.")) {
+    const clue = fieldClue(field).replace(/\.$/, "");
+    if (line.includes(clue)) return compactDebtClueMarker(clue);
   }
 
   if (line.includes(answerLabel)) return answerLabel;
@@ -1017,6 +1033,7 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
 function missionAnswerText(calculation: CalculationResult) {
   return [
     `지원구분: ${calculation.mission.supportType}`,
+    `부양가족: ${dependentAnswerLabel(calculation.householdMembers)}`,
     `월납부액: ${formatAmount(calculation.mission.monthlyPayment)}`,
     `상환기간: ${calculation.mission.repaymentPeriod}개월`,
     `생활비: ${formatAmount(calculation.adjustedLivingExpense)}`,
@@ -1294,9 +1311,10 @@ function App() {
       const fields = level.fields.filter((field) => field.screen === screenName);
       const total = fields.length || 1;
       const done = fields.filter((field) => solved[field.key]).length;
-      return { screenName, done, total };
+      const totalLabel = practiceMode && screenName === "가족" ? "?" : String(total);
+      return { screenName, done, total, totalLabel };
     });
-  }, [level, orderedScreenNames, solved]);
+  }, [level, orderedScreenNames, practiceMode, solved]);
   const foundClueCount = useMemo(() => level.fields.filter((field) => solved[field.key]).length, [level, solved]);
   const scoredClueCount = Math.max(0, foundClueCount - autoSolvedClueCount);
   const maxLevelScore = levelMaxScoreFor(level);
@@ -1310,7 +1328,8 @@ function App() {
   const resultMaxScore = results.reduce((sum, item) => sum + item.maxScore, 0);
   const resultTier = foxTierFor(sessionScore, resultMaxScore);
   const resultTierPercent = resultMaxScore > 0 ? Math.min(100, Math.round((sessionScore / resultMaxScore) * 100)) : 0;
-  const canStartPractice = resultTier.name === "마스터여우";
+  const reachedMasterTier = resultMaxScore > 0 && resultTier.minRatio >= 0.9;
+  const canStartPractice = Boolean(stats.practiceUnlocked || reachedMasterTier);
   const isLastPracticeLevel = practiceIndex >= PRACTICE_LEVELS.length - 1;
 
   const activeScenarioTargets = useMemo(() => {
@@ -1358,9 +1377,13 @@ function App() {
 
     const labels = uniqueValues(activeScenarioTargets.filter((field) => !solved[field.key]).map((field) => field.label));
     const actionText = practiceMode ? "인정되는 단서만 누르세요." : "문장 속 단어를 누르세요.";
-    if (labels.length === 0) return `${scenarioActiveField.screen} 단서를 찾아주세요. ${actionText}`;
-    if (labels.length === 1) return `${labels[0]} 단서를 찾아주세요. ${actionText}`;
-    return `${scenarioActiveField.screen} 단서를 찾아주세요. ${actionText}`;
+    const promptLabel =
+      practiceMode && scenarioActiveField.screen === "가족"
+        ? "부양가족"
+        : labels.length === 1
+          ? labels[0]
+          : scenarioActiveField.screen;
+    return `${promptLabel} 단서를 찾아주세요. ${actionText}`;
   }, [activeScenarioTargets, allCluesFound, practiceMode, scenarioActiveField, solved]);
 
   const scenarioDisplayLines = useMemo(() => {
@@ -1794,10 +1817,48 @@ function App() {
     );
   }
 
+  function foundClueDisplayItems(fields: IntakeField[]) {
+    const items: Array<{ key: string; label: string; value: string }> = [];
+    const insertedPrefixes = new Set<string>();
+
+    fields.forEach((field) => {
+      const aggregate =
+        field.key.startsWith("unsecuredDebt.")
+          ? { key: "unsecuredDebt", label: "신용대출" }
+          : field.key.startsWith("securedDebt.")
+            ? { key: "securedDebt", label: "담보대출" }
+            : null;
+
+      if (aggregate) {
+        if (!insertedPrefixes.has(aggregate.key)) {
+          const amount = fields
+            .filter((item) => item.key.startsWith(`${aggregate.key}.`))
+            .reduce((sum, item) => {
+              const value = answers[item.key] ?? item.answer;
+              return sum + (typeof value === "number" ? value : Number(item.answer) || 0);
+            }, 0);
+          items.push({ key: aggregate.key, label: aggregate.label, value: formatAmount(round1(amount)) });
+          insertedPrefixes.add(aggregate.key);
+        }
+        return;
+      }
+
+      items.push({
+        key: field.key,
+        label: field.label,
+        value: fieldValueLabel(field, answers[field.key] ?? field.answer),
+      });
+    });
+
+    return items;
+  }
+
   function renderFoundClueGroups(groups: Array<{ screenName: string; doneFields: IntakeField[]; total: number }>) {
     return (
       <>
         {groups.map((group) => {
+          const displayItems = foundClueDisplayItems(group.doneFields);
+
           return (
             <section className="found-clue-group" key={group.screenName}>
               <div className="found-group-head">
@@ -1812,10 +1873,10 @@ function App() {
                     <em>찾은 단서 없음</em>
                   </div>
                 ) : (
-                  group.doneFields.map((field) => (
-                    <div key={field.key}>
-                      <small>{field.label}</small>
-                      <em>{fieldValueLabel(field, answers[field.key] ?? field.answer)}</em>
+                  displayItems.map((item) => (
+                    <div key={item.key}>
+                      <small>{item.label}</small>
+                      <em>{item.value}</em>
                     </div>
                   ))
                 )}
@@ -2453,7 +2514,6 @@ function App() {
 
     if (phase === "scenario") {
       const remainingClues = level.fields.filter((field) => !solved[field.key]).length;
-      setAutoSolvedClueCount((count) => count + remainingClues);
       solveAllClues();
       setFeedback(remainingClues > 0 ? "상단 다음 버튼으로 남은 단서를 자동완료했습니다." : "");
       setMissionPage(0);
@@ -2729,6 +2789,7 @@ function App() {
       maxScore: maxLevelScore,
       supportType: calculation.supportType,
       income: calculation.income,
+      householdMembers: calculation.householdMembers,
       targetDebt: calculation.targetDebt,
       maxLivingExpense: calculation.maxLivingExpense,
       additionalLivingExpense: calculation.additionalLivingExpense,
@@ -2742,6 +2803,9 @@ function App() {
     };
     const nextResults = [...results, nextResult];
     const nextScore = sessionScore + levelScore;
+    const nextMaxScore = nextResults.reduce((sum, item) => sum + item.maxScore, 0);
+    const nextTier = foxTierFor(nextScore, nextMaxScore);
+    const nextPracticeUnlocked = Boolean(stats.practiceUnlocked || (!practiceMode && destination === "result" && nextTier.minRatio >= 0.9));
     setResults(nextResults);
     setSessionScore(nextScore);
 
@@ -2749,6 +2813,7 @@ function App() {
     const nextStats = {
       bestScore: Math.max(stats.bestScore, nextScore),
       clearedLevel: nextClearedLevel,
+      practiceUnlocked: nextPracticeUnlocked,
       runs: stats.runs + (levelIndex === LEVELS.length - 1 ? 1 : 0),
       lastScore: nextScore,
       updatedAt: new Date().toISOString(),
@@ -3059,6 +3124,18 @@ function App() {
                 기록 초기화
               </button>
             </div>
+
+            <button
+              className="practice-result-action"
+              disabled={!canStartPractice}
+              onClick={startPracticeRun}
+              title={canStartPractice ? "실전문제 접수" : "마스터여우 달성 시 열립니다"}
+              type="button"
+            >
+              <ClipboardList size={19} aria-hidden="true" />
+              실전문제 접수
+            </button>
+            {!canStartPractice && <small className="practice-lock-note">마스터여우 달성 시 열립니다.</small>}
           </section>
         )}
 
@@ -3088,9 +3165,8 @@ function App() {
                 <ChevronRight size={22} aria-hidden="true" />
               </button>
               {practiceMode ? (
-                <div className="practice-pill" aria-label="실전문제">
-                  <ClipboardList size={15} aria-hidden="true" />
-                  <span>실전</span>
+                <div className="score-pill practice-pill" aria-label="실전문제">
+                  <Trophy size={16} aria-hidden="true" />
                 </div>
               ) : (
                 <div className="score-pill">
@@ -3121,6 +3197,10 @@ function App() {
                   <div>
                     <dt>지원구분</dt>
                     <dd>{resultSupportTypeLabel(reviewResult.supportType)}</dd>
+                  </div>
+                  <div>
+                    <dt>부양가족</dt>
+                    <dd>{dependentAnswerLabel(reviewResult.householdMembers)}</dd>
                   </div>
                   <div>
                     <dt>대상채무</dt>
@@ -3303,7 +3383,7 @@ function App() {
                       type="button"
                     >
                       <span>{item.screenName}</span>
-                      <small>{item.done}/{item.total}</small>
+                      <small>{item.done}/{item.totalLabel}</small>
                     </button>
                   ))}
                 </div>
@@ -3332,7 +3412,7 @@ function App() {
                       type="button"
                     >
                       <span>{item.screenName}</span>
-                      <small>{item.done}/{item.total}</small>
+                      <small>{item.done}/{item.totalLabel}</small>
                     </button>
                   ))}
                 </div>
@@ -3418,6 +3498,10 @@ function App() {
                   <div>
                     <dt>지원구분</dt>
                     <dd>{resultSupportTypeLabel(calculation.supportType)}</dd>
+                  </div>
+                  <div>
+                    <dt>부양가족</dt>
+                    <dd>{dependentAnswerLabel(calculation.householdMembers)}</dd>
                   </div>
                   <div>
                     <dt>대상채무</dt>
@@ -3577,7 +3661,7 @@ function App() {
                   <Trophy size={21} aria-hidden="true" />
                   <div>
                     <span>{missionPage === 0 ? "지원구분 선택하기" : "최종미션"}</span>
-                    <h2>{missionPage === 0 ? "연체일수 기준으로 지원구분을 선택하세요." : "월납부액, 상환기간을 제출하세요."}</h2>
+                    <h2>{missionPage === 0 ? "연체일수 기준으로 지원구분을 선택하세요." : "부양가족, 월납부액, 상환기간을 제출하세요."}</h2>
                   </div>
                 </div>
 
@@ -3724,6 +3808,10 @@ function App() {
                       <div>
                         <small>지원구분</small>
                         <strong>{missionDraft.supportType || "선택 필요"}</strong>
+                      </div>
+                      <div>
+                        <small>부양가족</small>
+                        <strong>{dependentAnswerLabel(livingBasis.householdMembers)}</strong>
                       </div>
                       <div>
                         <small>월납부액</small>

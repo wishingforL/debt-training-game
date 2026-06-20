@@ -59,6 +59,7 @@ export type LevelData = {
 export type StoredStats = {
   bestScore: number;
   clearedLevel: number;
+  practiceUnlocked?: boolean;
   runs: number;
   lastScore: number;
   updatedAt?: string;
@@ -72,6 +73,7 @@ export type LevelResult = {
   maxScore: number;
   supportType: string;
   income: number;
+  householdMembers: number;
   targetDebt: number;
   maxLivingExpense: number;
   additionalLivingExpense: number;
