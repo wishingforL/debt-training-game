@@ -647,6 +647,17 @@ function nextOpenFieldInOrder(level: LevelData, solved: Record<string, boolean>,
   return nextIndex >= 0 ? nextIndex : Math.min(fallback, level.fields.length - 1);
 }
 
+function debtClueGroupKey(field: IntakeField) {
+  if (field.key.startsWith("unsecuredDebt.")) return "unsecuredDebt";
+  if (field.key.startsWith("securedDebt.")) return "securedDebt";
+  return null;
+}
+
+function sameDebtClueGroup(first: IntakeField, second: IntakeField) {
+  const firstGroup = debtClueGroupKey(first);
+  return firstGroup !== null && firstGroup === debtClueGroupKey(second);
+}
+
 function fieldValueLabel(field: IntakeField, value: FieldValue = field.answer) {
   if (typeof value === "boolean") return value ? "있음" : "없음";
   if (field.key === "dependents" && typeof value === "number") {
@@ -876,21 +887,24 @@ function fieldHint(field: IntakeField) {
   if (field.key.startsWith("unsecuredDebt.")) {
     return [
       `${field.screen} 화면의 ${field.label} 항목입니다.`,
-      "신용채무에 해당하는 개별 채무 금액 단서를 터치하세요. 여러 채무는 각각 찾아 합산합니다.",
+      "담보가 없는 빚을 누르세요. 카드대금, 카드론, 신용대출처럼 신용으로 빌린 금액입니다.",
+      "여러 개가 있으면 순서와 상관없이 각각 눌러 합산합니다.",
     ].join("\n");
   }
 
   if (field.key.startsWith("securedDebt.")) {
     return [
       `${field.screen} 화면의 ${field.label} 항목입니다.`,
-      "담보채무에 해당하는 개별 채무 금액 단서를 터치하세요. 신용채무와 구분해서 확인합니다.",
+      "담보가 붙은 대출 금액을 누르세요. 주택담보, 전세담보, 차량담보, 보증서담보가 여기에 해당합니다.",
+      "카드대금이나 신용대출 금액은 누르지 않습니다.",
     ].join("\n");
   }
 
   if (field.key.startsWith("securedPayment.")) {
     return [
       `${field.screen} 화면의 ${field.label} 항목입니다.`,
-      "담보대출 원리금이나 이자처럼 월 소득에서 먼저 차감되는 금액 단서를 터치하세요.",
+      "대출 잔액이 아니라 매월 내는 돈을 누르세요.",
+      "예: 매월 250천원씩 내고 있습니다.",
     ].join("\n");
   }
 
@@ -932,7 +946,9 @@ function practiceFieldHint(field: IntakeField, level: LevelData) {
   }
 
   if (field.screen === "채무현황") {
-    notes.push("신용채무, 담보채무, 담보 원리금은 서로 역할이 다릅니다. 월납부액 산정 대상은 신용채무이고, 담보 원리금이나 이자는 남은소득 계산에만 반영합니다.");
+    notes.push("신용채무는 월납부액을 계산할 때 쓰는 빚입니다.");
+    notes.push("담보대출은 집, 전세, 차량, 보증서처럼 담보가 붙은 대출입니다.");
+    notes.push("매월 내는 담보 원리금이나 이자는 소득에서 먼저 빼는 금액입니다.");
   }
 
   if (field.screen === "특이사항") {
@@ -955,9 +971,9 @@ function fieldAnswerText(field: IntakeField) {
   const marker = scenarioMarkerLabel(field, clue);
 
   return [
-    `선택할 텍스트: ${marker}`,
-    `정리값: ${field.label} ${fieldValueLabel(field)}`,
-    `시나리오 문장: ${clue}`,
+    `눌러야 하는 단서\n${marker}`,
+    `접수 화면에 정리되는 값\n${field.label} ${fieldValueLabel(field)}`,
+    `원문\n${clue}`,
   ].join("\n");
 }
 
@@ -1335,7 +1351,11 @@ function App() {
   const activeScenarioTargets = useMemo(() => {
     const currentClue = scenarioActiveField ? fieldClue(scenarioActiveField) : "";
     const currentFields = scenarioOrderedFields.filter((field) => fieldClue(field) === currentClue);
-    return currentFields.filter(Boolean);
+    const debtGroupFields = scenarioActiveField
+      ? scenarioOrderedFields.filter((field) => sameDebtClueGroup(scenarioActiveField, field))
+      : [];
+    const combinedFields = [...currentFields, ...debtGroupFields];
+    return combinedFields.filter((field, index, fields) => fields.findIndex((item) => item.key === field.key) === index);
   }, [scenarioActiveField, scenarioOrderedFields]);
 
   const screenClueGroups = useMemo(() => {
@@ -3195,14 +3215,6 @@ function App() {
 
                 <dl className="calc-sheet">
                   <div>
-                    <dt>지원구분</dt>
-                    <dd>{resultSupportTypeLabel(reviewResult.supportType)}</dd>
-                  </div>
-                  <div>
-                    <dt>부양가족</dt>
-                    <dd>{dependentAnswerLabel(reviewResult.householdMembers)}</dd>
-                  </div>
-                  <div>
                     <dt>대상채무</dt>
                     <dd>{formatAmount(reviewResult.targetDebt)}</dd>
                   </div>
@@ -3243,7 +3255,7 @@ function App() {
                           <span>월납부액</span>
                         </dt>
                         <dd>
-                          <strong>{maxPeriodPaymentFormulaText(reviewResult)}</strong>
+                          <strong className="calc-formula-max-payment">{maxPeriodPaymentFormulaText(reviewResult)}</strong>
                         </dd>
                       </div>
                       <div>
@@ -3496,14 +3508,6 @@ function App() {
 
                 <dl className="calc-sheet">
                   <div>
-                    <dt>지원구분</dt>
-                    <dd>{resultSupportTypeLabel(calculation.supportType)}</dd>
-                  </div>
-                  <div>
-                    <dt>부양가족</dt>
-                    <dd>{dependentAnswerLabel(calculation.householdMembers)}</dd>
-                  </div>
-                  <div>
                     <dt>대상채무</dt>
                     <dd>
                       {practiceMode ? <span>신용채무 합계</span> : null}
@@ -3543,7 +3547,7 @@ function App() {
                           <span>월납부액</span>
                         </dt>
                         <dd>
-                          <strong>{maxPeriodPaymentFormulaText(calculation)}</strong>
+                          <strong className="calc-formula-max-payment">{maxPeriodPaymentFormulaText(calculation)}</strong>
                         </dd>
                       </div>
                       <div>
