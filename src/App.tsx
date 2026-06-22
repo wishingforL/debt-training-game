@@ -61,7 +61,7 @@ const MONEY_FIELD_KEYS = new Set([
 const TUTORIAL_PAGES = [
   {
     badge: "게임 소개",
-    title: "신입 상담원이 되어 접수 단서를 찾습니다.",
+    title: "신입 직원이 되어 접수 단서를 찾습니다.",
     visual: "flow",
     lines: [
       "표지를 누른 뒤 레벨과 문항을 선택합니다.",
@@ -1299,6 +1299,23 @@ function App() {
       });
     });
   }, [allCluesFound, phase, reviewResult, screen]);
+
+  useEffect(() => {
+    const scrollToTop = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      document.querySelector<HTMLElement>(".phone-shell")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+
+    const frame = window.requestAnimationFrame(scrollToTop);
+    const timeout = window.setTimeout(scrollToTop, 80);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [levelIndex, missionPage, phase, practiceIndex, practiceMode, reviewResult, screen, tutorialIndex]);
 
   const activeAttemptCount = wrongAttempts[activeField?.key] ?? 0;
   const phaseStep = phase === "scenario" ? 1 : phase === "intake" ? 2 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
@@ -3240,10 +3257,10 @@ function App() {
                     </dd>
                   </div>
                   {canUseMaxRepaymentPeriod(reviewResult.maxLivingExpense, reviewResult.repaymentBaseIncome) && (
-                    <div>
+                    <div className="calc-period-payment-row">
                       <dt>월납부액</dt>
                       <dd>
-                        <strong>{reviewResult.repaymentFormula}</strong>
+                        <strong className="calc-formula-period-payment">{reviewResult.repaymentFormula}</strong>
                       </dd>
                     </div>
                   )}
@@ -3532,10 +3549,10 @@ function App() {
                     </dd>
                   </div>
                   {canUseMaxRepaymentPeriod(calculation.maxLivingExpense, calculation.repaymentBaseIncome) && (
-                    <div>
+                    <div className="calc-period-payment-row">
                       <dt>월납부액</dt>
                       <dd>
-                        <strong>{repaymentPeriodFormulaText(calculation)}</strong>
+                        <strong className="calc-formula-period-payment">{repaymentPeriodFormulaText(calculation)}</strong>
                       </dd>
                     </div>
                   )}
