@@ -1354,6 +1354,21 @@ h2 {
   overflow-wrap: normal;
 }
 
+.customer-log.is-story .scenario-clue-marker.is-found {
+  display: inline;
+  min-height: 0;
+  margin: 0 1px;
+  padding: 2px 6px;
+  border-width: 2px;
+  border-radius: 999px;
+  font-size: 0.9em;
+  line-height: 1.25;
+  vertical-align: baseline;
+  white-space: nowrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .scenario-line-text {
   font-size: 0.96rem;
   line-height: 1.64;
@@ -1490,9 +1505,9 @@ h2 {
 }
 
 .scenario-find-prompt strong {
-  font-size: 0.98rem;
+  font-size: 1.08rem;
   font-weight: 1000;
-  line-height: 1.24;
+  line-height: 1.22;
 }
 
 .practice-scenario-tip {
@@ -3156,6 +3171,10 @@ h2 {
     min-height: 44px;
     padding: 8px 12px;
     font-size: 0.86rem;
+  }
+
+  .scenario-find-prompt strong {
+    font-size: 1rem;
   }
 
   .screen-chips > span,

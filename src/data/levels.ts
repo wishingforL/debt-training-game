@@ -660,7 +660,7 @@ export const PRACTICE_LEVELS: LevelData[] = [
       moneyField("income", "월 소득", "소득", 490, "월 4,900천원을 벌고 있습니다."),
       numberField("dependent.highSchoolChild", "고등학생 자녀", "가족", 1, "명", "고등학생 자녀 1명도 함께 거주하고 있습니다."),
       numberField("overdueDays", "연체일수", "채무현황", 22, "일", "카드값 때문에 22일째 연체 중입니다."),
-      booleanField("homeOwned", "공동명의 주택", "재산", "현재 배우자와 본인 공동명의 집에 거주하고 있고"),
+      booleanField("homeOwned", "재산", "재산", "현재 배우자와 본인 공동명의 집에 거주하고 있고"),
       moneyField("securedDebt.home", "담보대출", "채무현황", 9500, "00은행 주택담보대출은 95,000천원"),
       numberField("ownershipShare", "본인 지분", "재산", 50, "%", "본인 지분은 50%입니다."),
       moneyField("homeValue", "집 전체 시세", "재산", 11000, "집 전체 시세는 110,000천원입니다."),

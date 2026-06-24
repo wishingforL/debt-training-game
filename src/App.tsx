@@ -658,6 +658,10 @@ function sameDebtClueGroup(first: IntakeField, second: IntakeField) {
   return firstGroup !== null && firstGroup === debtClueGroupKey(second);
 }
 
+function sameDependentClueGroup(first: IntakeField, second: IntakeField) {
+  return first.key.startsWith("dependent.") && second.key.startsWith("dependent.");
+}
+
 function fieldValueLabel(field: IntakeField, value: FieldValue = field.answer) {
   if (typeof value === "boolean") return value ? "있음" : "없음";
   if (field.key === "dependents" && typeof value === "number") {
@@ -1000,6 +1004,7 @@ function supportHint(level: LevelData) {
 function missionHint(calculation: CalculationResult, level: LevelData) {
   const overdueDays = numericAnswer(level, "overdueDays");
   const supportMeta = supportOptionMeta(calculation.supportType);
+  const isPracticeCase = Boolean(level.narrative);
   const usesSecuredDeduction = hasSecuredIncomeDeduction({
     income: calculation.income,
     repaymentBaseIncome: calculation.repaymentBaseIncome,
@@ -1022,15 +1027,22 @@ function missionHint(calculation: CalculationResult, level: LevelData) {
   return [
     "1. 지원구분: 연체일수 기준",
     `${formatNumber(overdueDays)}일 → ${calculation.supportType}`,
+    ...(isPracticeCase
+      ? [
+          "",
+          "2. 부양가족",
+          `인정 부양가족 ${dependentAnswerLabel(calculation.householdMembers)} 기준으로 검증합니다.`,
+        ]
+      : []),
     "",
-    "2. 월납부액: 10천원 단위로 반올림하여 산출",
+    `${isPracticeCase ? "3" : "2"}. 월납부액: 10천원 단위로 반올림하여 산출`,
     usesSecuredDeduction
       ? `남은소득: 총 소득 ${formatAmount(calculation.income)} - 담보 원리금 ${formatAmount(calculation.securedPayment)} = ${formatAmount(calculation.repaymentBaseIncome)}`
       : `소득: ${formatAmount(calculation.income)}`,
     ...livingLines,
     `${incomeLabel} ${formatAmount(calculation.repaymentBaseIncome)} - 생활비 ${formatAmount(calculation.adjustedLivingExpense)} = 월납부액 ${formatAmount(calculation.monthlyPayment)}`,
     "",
-    "3. 최대 상환기간 월납부액",
+    `${isPracticeCase ? "4" : "3"}. 최대 상환기간 월납부액`,
     `${calculation.supportType}: ${supportMeta.detail}`,
     repaymentPeriodFormulaText(calculation),
     ...(level.narrative
@@ -1371,7 +1383,10 @@ function App() {
     const debtGroupFields = scenarioActiveField
       ? scenarioOrderedFields.filter((field) => sameDebtClueGroup(scenarioActiveField, field))
       : [];
-    const combinedFields = [...currentFields, ...debtGroupFields];
+    const dependentGroupFields = scenarioActiveField
+      ? scenarioOrderedFields.filter((field) => sameDependentClueGroup(scenarioActiveField, field))
+      : [];
+    const combinedFields = [...currentFields, ...debtGroupFields, ...dependentGroupFields];
     return combinedFields.filter((field, index, fields) => fields.findIndex((item) => item.key === field.key) === index);
   }, [scenarioActiveField, scenarioOrderedFields]);
 
@@ -1793,15 +1808,42 @@ function App() {
 
   function renderScenarioLine(line: string) {
     const fieldMarkers = scenarioFieldsForLine(line)
-      .map((field) => {
+      .flatMap((field) => {
         const label = scenarioMarkerLabel(field, line);
-        return {
+        if (!label) return [];
+
+        const markers: Array<{
           decoy: undefined,
-          field,
-          fields: [field],
-          index: scenarioMarkerIndex(field, line, label),
-          label,
-        };
+          field: IntakeField;
+          fields: IntakeField[];
+          index: number;
+          label: string;
+        }> = [];
+        let searchFrom = 0;
+
+        while (searchFrom < line.length) {
+          const index = line.indexOf(label, searchFrom);
+          if (index < 0) break;
+
+          markers.push({
+            decoy: undefined,
+            field,
+            fields: [field],
+            index,
+            label,
+          });
+          searchFrom = index + label.length;
+        }
+
+        return markers.length > 0
+          ? markers
+          : [{
+              decoy: undefined,
+              field,
+              fields: [field],
+              index: scenarioMarkerIndex(field, line, label),
+              label,
+            }];
       })
       .filter((marker) => marker.index >= 0)
       .reduce<Array<{ decoy?: DecoyClue; fields: IntakeField[]; index: number; label: string }>>((markers, marker) => {
@@ -1887,7 +1929,17 @@ function App() {
       });
     });
 
-    return items;
+    if (fields[0]?.screen !== "채무현황") return items;
+
+    const debtDisplayOrder = (key: string) => {
+      if (key === "overdueDays") return 0;
+      if (key === "unsecuredDebt" || key.startsWith("unsecuredDebt.")) return 1;
+      if (key === "securedDebt" || key.startsWith("securedDebt.")) return 2;
+      if (key === "securedPayment" || key.startsWith("securedPayment.")) return 3;
+      return 4;
+    };
+
+    return [...items].sort((first, second) => debtDisplayOrder(first.key) - debtDisplayOrder(second.key));
   }
 
   function renderFoundClueGroups(groups: Array<{ screenName: string; doneFields: IntakeField[]; total: number }>) {
@@ -2761,9 +2813,10 @@ function App() {
     const monthlyPayment = repaymentModel.monthlyPayment;
     const repaymentPeriod = repaymentModel.repaymentPeriod;
     const mission = calculation.mission;
+    const matchesRequiredDependents = !practiceMode || livingDependents === expectedLivingDependents;
     const matchesMissionValues =
       missionDraft.supportType === mission.supportType &&
-      livingDependents === expectedLivingDependents &&
+      matchesRequiredDependents &&
       Math.abs(monthlyPayment - mission.monthlyPayment) <= 0.05 &&
       repaymentPeriod === mission.repaymentPeriod;
     const isCorrect =
@@ -2779,7 +2832,7 @@ function App() {
       setWrongAttempts((current) => ({ ...current, mission: nextAttempts }));
       setLevelMistakes((count) => count + 1);
       setFeedback(
-        !matchesLivingDependents
+        practiceMode && !matchesLivingDependents
           ? `부양가족 수를 다시 확인해 주세요. 이 문항은 부양가족 ${formatNumber(expectedLivingDependents)}명 기준입니다.`
           : nextAttempts >= 2
             ? "두 번 틀렸어요. 힌트창에서 정답을 볼 수 있습니다."
