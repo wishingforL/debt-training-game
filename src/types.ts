@@ -76,7 +76,10 @@ export type LevelResult = {
   householdMembers: number;
   targetDebt: number;
   maxLivingExpense: number;
+  baseAdditionalLivingExpense: number;
   additionalLivingExpense: number;
+  specialLivingExpense: number;
+  specialLivingExpenseLimit: number;
   adjustedLivingExpense: number;
   securedPayment: number;
   repaymentBaseIncome: number;
