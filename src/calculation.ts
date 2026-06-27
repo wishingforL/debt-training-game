@@ -139,7 +139,7 @@ export function paymentForMonths(debt: number, months: number, monthlyRate: numb
   return (debt * monthlyRate) / (1 - (1 + monthlyRate) ** -months);
 }
 
-function specialLivingExpenseForMaxPeriod({
+export function specialLivingExpenseForMaxPeriod({
   minimumLivingExpense,
   repaymentBaseIncome,
   maxLivingExpense,

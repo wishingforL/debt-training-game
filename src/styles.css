@@ -2057,6 +2057,8 @@ h2 {
   border-radius: 999px;
   touch-action: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
 }
 
 .balance-bar .bar-payment,
@@ -2099,10 +2101,27 @@ h2 {
   margin: 0;
   opacity: 0;
   z-index: 2;
+  pointer-events: none;
   appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   cursor: grab;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.balance-bar input::-webkit-slider-thumb {
+  width: 48px;
+  height: 48px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.balance-bar input::-moz-range-thumb {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: transparent;
 }
 
 .balance-feedback {

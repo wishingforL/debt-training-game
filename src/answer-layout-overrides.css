@@ -1,0 +1,242 @@
+/*
+ * Answer/result pages share a dense two-column layout. Keep labels aligned,
+ * give formulas enough width, and avoid tiny orphan text on mobile.
+ */
+.calc-sheet {
+  --answer-label-col: clamp(72px, 22vw, 98px);
+  --answer-row-x: clamp(16px, 4.4vw, 22px);
+}
+
+.calc-sheet > div {
+  display: grid;
+  grid-template-columns: var(--answer-label-col) minmax(0, 1fr);
+  align-items: center;
+  min-height: clamp(58px, 12vw, 76px);
+  padding-inline: var(--answer-row-x);
+  column-gap: clamp(14px, 3.8vw, 20px);
+}
+
+.calc-sheet > div > dt {
+  min-width: 0;
+  font-size: clamp(0.92rem, 3.45vw, 1.08rem);
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+.calc-sheet > div > dd {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+  text-align: left;
+}
+
+.calc-sheet > div > dd small {
+  display: block;
+  margin-bottom: 2px;
+  font-size: clamp(0.78rem, 2.9vw, 0.9rem);
+  line-height: 1.18;
+  word-break: keep-all;
+}
+
+.calc-sheet > div > dd strong {
+  display: block;
+  width: 100%;
+  max-width: none;
+  font-size: clamp(1.05rem, 3.95vw, 1.22rem);
+  line-height: 1.22;
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+.calc-sheet > div > dd strong.calc-formula-inline,
+.calc-sheet > div > dd strong.calc-formula-tight,
+.calc-sheet > div > dd strong.calc-formula-period-payment,
+.calc-sheet > div > dd strong.calc-formula-max-payment {
+  font-size: clamp(0.92rem, 3.42vw, 1.07rem);
+  line-height: 1.22;
+  overflow-wrap: break-word;
+}
+
+.calc-sheet > div > dd .answer-note,
+.calc-sheet > div > dd .formula-note {
+  display: block;
+  margin-top: 3px;
+  font-size: clamp(0.76rem, 2.85vw, 0.88rem);
+  line-height: 1.2;
+}
+
+.answer-summary-card div {
+  display: grid;
+  grid-template-columns: clamp(68px, 24%, 96px) minmax(0, 1fr);
+  align-items: center;
+  min-height: 54px;
+  column-gap: 12px;
+}
+
+.answer-summary-card small,
+.answer-summary-card strong {
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.answer-summary-card strong {
+  justify-self: end;
+  text-align: right;
+  overflow-wrap: break-word;
+}
+
+.calc-answer-card div {
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.calc-answer-card small {
+  font-size: clamp(0.78rem, 2.9vw, 0.88rem);
+  line-height: 1.2;
+}
+
+.calc-answer-card strong {
+  font-size: clamp(1.02rem, 3.85vw, 1.18rem);
+  line-height: 1.22;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+.answer-box {
+  gap: 8px;
+}
+
+.answer-box strong {
+  line-height: 1.26;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+@media (max-width: 380px) {
+  .calc-sheet {
+    --answer-label-col: clamp(68px, 21vw, 90px);
+    --answer-row-x: clamp(14px, 4vw, 18px);
+  }
+
+  .calc-sheet > div {
+    column-gap: 10px;
+  }
+
+  .calc-sheet > div > dt {
+    font-size: clamp(0.86rem, 3.2vw, 0.98rem);
+  }
+
+  .calc-sheet > div > dd strong {
+    font-size: clamp(0.96rem, 3.6vw, 1.1rem);
+  }
+
+  .calc-sheet > div > dd strong.calc-formula-inline,
+  .calc-sheet > div > dd strong.calc-formula-tight,
+  .calc-sheet > div > dd strong.calc-formula-period-payment,
+  .calc-sheet > div > dd strong.calc-formula-max-payment {
+    font-size: clamp(0.86rem, 3.18vw, 0.98rem);
+  }
+
+  .answer-summary-card div {
+    grid-template-columns: clamp(64px, 23%, 88px) minmax(0, 1fr);
+    column-gap: 10px;
+  }
+}
+
+/* 정답 해설 행 공통 보정: 라벨/값 시작선을 맞추고 수식 가독성을 올립니다. */
+.calc-sheet {
+  --calc-label-col: clamp(76px, 21vw, 96px);
+  --calc-row-x: clamp(18px, 4.5vw, 24px);
+  --calc-row-gap: clamp(12px, 3.2vw, 18px);
+}
+
+.calc-sheet > div {
+  display: grid !important;
+  grid-template-columns: var(--calc-label-col) minmax(0, 1fr) !important;
+  align-items: center !important;
+  column-gap: var(--calc-row-gap) !important;
+  padding-left: var(--calc-row-x) !important;
+  padding-right: var(--calc-row-x) !important;
+}
+
+.calc-sheet > div > dt {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: none !important;
+  font-size: clamp(0.98rem, 3.35vw, 1.12rem) !important;
+  line-height: 1.18 !important;
+  word-break: keep-all !important;
+}
+
+.calc-sheet > div > dd {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  justify-self: stretch !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+
+.calc-sheet > div > dd small {
+  display: block !important;
+  width: 100% !important;
+  font-size: clamp(0.78rem, 2.85vw, 0.92rem) !important;
+  line-height: 1.22 !important;
+  word-break: keep-all !important;
+}
+
+.calc-sheet > div > dd strong,
+.calc-sheet > div > dd strong.calc-formula-inline,
+.calc-sheet > div > dd strong.calc-formula-tight,
+.calc-sheet > div > dd strong.calc-formula-period-payment,
+.calc-sheet > div > dd strong.calc-formula-max-payment {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  text-align: left !important;
+  line-height: 1.24 !important;
+  letter-spacing: 0 !important;
+  word-break: keep-all !important;
+  overflow-wrap: break-word !important;
+}
+
+.calc-sheet > div > dd strong.calc-formula-inline {
+  font-size: clamp(0.98rem, 3.45vw, 1.12rem) !important;
+}
+
+.calc-sheet > div > dd strong.calc-formula-tight,
+.calc-sheet > div > dd strong.calc-formula-period-payment,
+.calc-sheet > div > dd strong.calc-formula-max-payment {
+  font-size: clamp(0.84rem, 2.95vw, 1rem) !important;
+}
+
+.calc-sheet > div > dd strong.calc-result-number {
+  font-size: clamp(1.1rem, 4.25vw, 1.36rem) !important;
+}
+
+@media (max-width: 380px) {
+  .calc-sheet {
+    --calc-label-col: clamp(72px, 20vw, 86px);
+    --calc-row-x: clamp(16px, 4.2vw, 20px);
+    --calc-row-gap: clamp(10px, 3vw, 14px);
+  }
+
+  .calc-sheet > div > dt {
+    font-size: clamp(0.9rem, 3.25vw, 1rem) !important;
+  }
+
+  .calc-sheet > div > dd strong.calc-formula-inline {
+    font-size: clamp(0.9rem, 3.25vw, 1.02rem) !important;
+  }
+
+  .calc-sheet > div > dd strong.calc-formula-tight,
+  .calc-sheet > div > dd strong.calc-formula-period-payment,
+  .calc-sheet > div > dd strong.calc-formula-max-payment {
+    font-size: clamp(0.78rem, 2.85vw, 0.94rem) !important;
+  }
+}
