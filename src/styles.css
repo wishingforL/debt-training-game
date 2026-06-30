@@ -362,6 +362,11 @@ p {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
+.tutorial-mini-balance {
+  max-height: none;
+  grid-template-rows: auto auto 22px;
+}
+
 .tutorial-mini-scenario {
   gap: 8px;
 }
@@ -418,6 +423,8 @@ p {
 
 .tutorial-mini-scenario p {
   gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.22;
 }
 
 .tutorial-mini-scenario div {
@@ -514,16 +521,56 @@ p {
   background: #000;
 }
 
+.tutorial-mini-balance-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+}
+
+.tutorial-mini-balance-title strong,
+.tutorial-mini-balance-title span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.tutorial-mini-balance-title span {
+  justify-self: end;
+}
+
 .tutorial-mini-balance-head {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   font-size: 0.78rem;
 }
 
+.tutorial-mini-balance-head strong {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.tutorial-mini-balance-head strong:first-child {
+  justify-self: start;
+}
+
+.tutorial-mini-balance-head strong:last-child {
+  justify-self: end;
+  text-align: right;
+}
+
+.tutorial-mini-balance > p {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .tutorial-mini-balance > i {
   position: relative;
-  height: 28px;
+  height: 22px;
   overflow: hidden;
   background: linear-gradient(90deg, #000 0 28%, #fff 28% 100%);
   border-radius: 999px;
@@ -535,19 +582,24 @@ p {
   position: absolute;
   left: 28%;
   top: 50%;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   background: var(--bg);
   border: 2px solid #000;
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
 
-.tutorial-mini-balance-bar {
-  height: 32px;
+.balance-bar.tutorial-mini-balance-bar {
+  height: 22px;
 }
 
-.tutorial-mini-balance p,
+.balance-bar.tutorial-mini-balance-bar i {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
 .tutorial-mini-score p {
   margin: 0;
   padding: 7px 10px;
@@ -558,22 +610,31 @@ p {
 .tutorial-mini-score {
   justify-items: center;
   text-align: center;
-  gap: 8px;
-  padding-bottom: 12px;
+  gap: 5px;
+  padding: 8px 10px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(255, 212, 190, 0.8));
 }
 
+.tutorial-mini-score > span {
+  font-size: 0.74rem;
+  line-height: 1.15;
+}
+
 .tutorial-mini-score strong {
-  padding: 7px 15px;
+  padding: 4px 10px;
   color: var(--button-text);
   background: #000;
   border-radius: 999px;
+  font-size: 0.78rem;
+  line-height: 1.15;
 }
 
 .tutorial-mini-score p {
   max-width: fit-content;
-  padding: 6px 9px;
+  padding: 4px 7px;
   background: rgba(255, 255, 255, 0.58);
+  font-size: 0.78rem;
+  line-height: 1.15;
 }
 
 .tutorial-mini-submit {
@@ -637,8 +698,8 @@ p {
 
 .tutorial-mini-score-detail p {
   margin: 0;
-  font-size: 0.68rem;
-  line-height: 1.2;
+  font-size: 0.74rem;
+  line-height: 1.24;
   white-space: nowrap;
 }
 
@@ -672,8 +733,8 @@ p {
 
 .tutorial-flow div,
 .tutorial-support div,
-.tutorial-intake div,
-.tutorial-intake label,
+.tutorial-review-list div,
+.tutorial-review-list label,
 .tutorial-clue-step label {
   min-height: 46px;
   display: flex;
@@ -717,17 +778,17 @@ p {
   grid-template-columns: auto 1fr auto;
 }
 
-.tutorial-intake {
+.tutorial-review-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.tutorial-intake label {
+.tutorial-review-list label {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: auto 1fr auto;
 }
 
-.tutorial-intake strong,
+.tutorial-review-list strong,
 .tutorial-balance strong {
   color: var(--ink);
 }
@@ -1256,7 +1317,6 @@ h2 {
 }
 
 .mission-panel,
-.intake-panel,
 .calculation-panel {
   display: grid;
   gap: 14px;
@@ -2140,6 +2200,10 @@ h2 {
 }
 
 .balance-feedback.is-notice {
+  color: var(--ink);
+}
+
+.balance-feedback.is-period {
   color: #0047ff;
 }
 
@@ -2149,7 +2213,7 @@ h2 {
 
 .answer-summary-card {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   padding: 14px 16px;
   background: rgba(255, 255, 255, 0.72);
   border-radius: 22px;
@@ -2161,11 +2225,15 @@ h2 {
   font-weight: 1000;
 }
 
-.answer-summary-card div {
+.answer-summary-card > div {
+  min-height: 45px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 8px 11px;
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 14px;
 }
 
 .answer-summary-card small {
@@ -3445,8 +3513,10 @@ button[aria-label="닫기"] {
 }
 
 .calc-sheet div {
-  grid-template-columns: minmax(92px, 0.34fr) minmax(0, 1fr);
-  column-gap: 12px;
+  grid-template-columns: 68px minmax(0, 1fr);
+  min-height: 52px;
+  column-gap: 9px;
+  padding: 10px 11px;
 }
 
 .calc-sheet dt,
@@ -3459,13 +3529,38 @@ button[aria-label="닫기"] {
   word-break: keep-all;
 }
 
+.calc-sheet dt {
+  font-size: clamp(0.72rem, 2.5vw, 0.84rem);
+  line-height: 1.12;
+}
+
+.calc-sheet dt span {
+  white-space: normal;
+}
+
+.calc-sheet dd {
+  font-size: clamp(0.82rem, 2.8vw, 0.94rem);
+  line-height: 1.18;
+}
+
+.calc-sheet dd > strong:not([class]) {
+  font-size: clamp(0.7rem, 2.35vw, 0.82rem);
+  line-height: 1.18;
+}
+
+.calc-sheet dd span {
+  margin-bottom: 2px;
+  font-size: clamp(0.62rem, 2.18vw, 0.72rem);
+  line-height: 1.14;
+}
+
 .calc-sheet dd strong.calc-formula-inline,
 .calc-sheet dd strong.calc-formula-tight,
 .calc-sheet dd strong.calc-formula-period-payment,
 .calc-sheet dd strong.calc-formula-max-payment {
   max-width: 100%;
-  font-size: clamp(0.7rem, 2.38vw, 0.88rem);
-  line-height: 1.34;
+  font-size: clamp(0.64rem, 2.26vw, 0.8rem);
+  line-height: 1.2;
 }
 
 .calc-reason-card li::before {
@@ -3477,13 +3572,42 @@ button[aria-label="닫기"] {
 @media (max-width: 380px) {
   .calc-sheet div,
   .calc-sheet div.calc-period-payment-row {
-    grid-template-columns: minmax(78px, 0.32fr) minmax(0, 1fr);
+    grid-template-columns: 62px minmax(0, 1fr);
   }
 
   .calc-sheet dd strong.calc-formula-inline,
   .calc-sheet dd strong.calc-formula-tight,
   .calc-sheet dd strong.calc-formula-period-payment,
   .calc-sheet dd strong.calc-formula-max-payment {
-    font-size: clamp(0.66rem, 2.18vw, 0.8rem);
+    font-size: clamp(0.6rem, 2.1vw, 0.74rem);
   }
+}
+
+.screen-chips.tutorial-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.screen-chips.tutorial-chip-grid > button {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 6px;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.tutorial-mini-scenario .tutorial-mini-token,
+.tutorial-mini-scenario .scenario-clue-marker.is-found {
+  min-height: 31px;
+  margin: 0;
+  padding: 3px 10px;
+  border: 2px solid #000;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  font-weight: 1000;
+  line-height: 1.18;
+  white-space: nowrap;
 }

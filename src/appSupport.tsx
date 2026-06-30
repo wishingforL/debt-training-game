@@ -26,7 +26,6 @@ export const BEFORE_FOCUS_SLIDER_WEIGHT = 44;
 export const AFTER_FOCUS_SLIDER_WEIGHT = 42.5;
 export const HIGH_PAYMENT_SLIDER_WEIGHT = 2;
 export const MIN_LIVING_EXPENSE_RATIO = 0.9;
-export const WRONG_GROUP_CLUE_KEY = "__wrongClue";
 export const MONEY_FIELD_KEYS = new Set([
   "income",
   "debt",
@@ -198,7 +197,7 @@ export const FOX_TIERS = [
 ];
 
 export type Screen = "start" | "tutorial" | "levelSelect" | "game" | "result" | "practiceResult";
-export type Phase = "scenario" | "intake" | "calculation" | "mission";
+export type Phase = "scenario" | "calculation" | "mission";
 
 export type MissionDraft = {
   supportType: string;
@@ -254,7 +253,7 @@ export function canUseMaxRepaymentPeriod(maxLivingExpense: number, income: numbe
 
 export function maxRepaymentAvailabilityText(maxLivingExpense: number, income: number, maxRepaymentMonths: number) {
   const status = canUseMaxRepaymentPeriod(maxLivingExpense, income) ? "가능" : "추가 검증 필요";
-  return `최대 상환기간(${maxRepaymentMonths}개월) ${status}`;
+  return `최대 ${maxRepaymentMonths}개월 ${status}`;
 }
 
 export type MaxRepaymentReviewData = {
@@ -288,7 +287,7 @@ export function maxPeriodMonthlyPaymentFor(data: MaxRepaymentReviewData) {
 export function maxPeriodPaymentFormulaText(data: MaxRepaymentReviewData) {
   const methodLabel = (data.annualInterestRate ?? annualInterestRateForSupport(data.supportType)) > 0 ? "원리금" : "원금";
 
-  return `${formatAmount(data.targetDebt)} ${data.maxRepaymentMonths}개월 ${methodLabel} 분할\n= ${formatAmount(maxPeriodMonthlyPaymentFor(data))}`;
+  return `${formatAmount(data.targetDebt)} ${data.maxRepaymentMonths}개월 ${methodLabel}\n= ${formatAmount(maxPeriodMonthlyPaymentFor(data))}`;
 }
 
 export function recognizedMaxLivingExpenseFor(data: MaxRepaymentReviewData) {
@@ -325,7 +324,7 @@ export function recognizedLivingExpenseFormulaTextFor(data: MaxRepaymentReviewDa
 }
 
 export function recognizedLivingExpenseFormulaDisplayTextFor(data: MaxRepaymentReviewData, livingExpense: number) {
-  return recognizedLivingExpenseFormulaTextFor(data, livingExpense).replace(" = ", "\n= ");
+  return recognizedLivingExpenseFormulaTextFor(data, livingExpense);
 }
 
 export function needsMaxRepaymentVerification(data: MaxRepaymentReviewData) {
@@ -345,11 +344,11 @@ export function maxRepaymentVerificationLabel(data: MaxRepaymentReviewData) {
   const specialExtra = specialLivingExpenseFor(data);
 
   if (baseExtra > 0 && specialExtra > 0) {
-    return "소득 - (최대생활비 + 추가인정 생활비 + 기타 특별 생활비) - 최장기간 월납부액";
+    return "소득-(최대생활비+추가+기타)-월납부액";
   }
-  if (specialExtra > 0) return "소득 - (최대생활비 + 기타 특별 생활비) - 최장기간 월납부액";
-  if (baseExtra > 0) return "소득 - (최대생활비 + 추가인정 생활비) - 최장기간 월납부액";
-  return "소득 - 최대생활비 - 최장기간 월납부액";
+  if (specialExtra > 0) return "소득-(최대생활비+기타)-월납부액";
+  if (baseExtra > 0) return "소득-(최대생활비+추가)-월납부액";
+  return "소득-최대생활비-월납부액";
 }
 
 export function maxRepaymentVerificationFormulaText(data: MaxRepaymentReviewData) {
@@ -363,9 +362,7 @@ export function isMaxRepaymentVerifiedPossible(data: MaxRepaymentReviewData) {
 }
 
 export function maxRepaymentVerificationStatusText(data: MaxRepaymentReviewData) {
-  return `최대 상환기간(${data.maxRepaymentMonths}개월) ${
-    isMaxRepaymentVerifiedPossible(data) ? "가능" : "불가"
-  }`;
+  return `${data.maxRepaymentMonths}개월 ${isMaxRepaymentVerifiedPossible(data) ? "가능" : "불가"}`;
 }
 
 export function livingExpenseFormulaText(baseIncome: number, monthlyPayment: number, livingExpense: number) {
@@ -892,6 +889,30 @@ export function scenarioMarkerLabel(field: IntakeField, line: string) {
   return answerLabel;
 }
 
+export function scenarioMarkerLabels(field: IntakeField, line: string) {
+  if (field.key.startsWith("unsecuredDebt.") || field.key.startsWith("securedDebt.")) {
+    const clue = fieldClue(field).replace(/\.$/, "");
+
+    if (line.includes(clue)) {
+      const compactClue = compactDebtClueMarker(clue).replace(/[,.]$/u, "").trim();
+      const amountMatch = compactClue.match(/[\d,]+천원/u);
+
+      if (amountMatch) {
+        const amountLabel = amountMatch[0];
+        const debtTypeLabel = compactClue
+          .replace(amountLabel, "")
+          .replace(/[,\s]+$/u, "")
+          .trim();
+
+        return [debtTypeLabel, amountLabel].filter((label) => label.length > 0 && line.includes(label));
+      }
+    }
+  }
+
+  const label = scenarioMarkerLabel(field, line);
+  return label ? [label] : [];
+}
+
 export function allIndexesOf(text: string, query: string) {
   const indexes: number[] = [];
   if (!query) return indexes;
@@ -930,10 +951,6 @@ export function scenarioMarkerIndex(field: IntakeField, line: string, label: str
 
 export function scenarioDecoyMarkerIndex(decoy: DecoyClue, line: string) {
   return markerIndexInContext(line, decoy.label, decoy.clue);
-}
-
-export function isCorrectClue(field: IntakeField, selectedClue: FieldValue | undefined) {
-  return String(selectedClue ?? "") === fieldClue(field);
 }
 
 export function uniqueValues(values: string[]) {
@@ -1152,11 +1169,13 @@ export function missionAnswerText(calculation: CalculationResult) {
 }
 
 export function repaymentPeriodFormulaText(calculation: CalculationResult) {
+  const maxPeriodMonthlyPayment = maxPeriodMonthlyPaymentFor(calculation);
+
   if (calculation.annualInterestRate > 0) {
-    return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원리금 분할\n= 월 ${formatAmount(calculation.monthlyPayment)}`;
+    return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원리금\n= ${formatAmount(maxPeriodMonthlyPayment)}`;
   }
 
-  return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원금 분할\n= 월 ${formatAmount(calculation.monthlyPayment)}`;
+  return `${formatAmount(calculation.targetDebt)} ${calculation.maxRepaymentMonths}개월 원금\n= ${formatAmount(maxPeriodMonthlyPayment)}`;
 }
 
 export function supportOptionMeta(option: string) {
