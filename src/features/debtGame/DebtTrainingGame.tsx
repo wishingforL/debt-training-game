@@ -238,7 +238,22 @@ function App() {
   const phaseStep = phase === "scenario" ? 1 : phase === "mission" ? 3 + missionPage * 0.5 : 4;
   const totalCaseCount = practiceMode ? PRACTICE_LEVELS.length : LEVELS.length;
   const currentCaseIndex = practiceMode ? practiceIndex : levelIndex;
-  const phaseProgressWidth = ((currentCaseIndex + phaseStep / 4) / totalCaseCount) * 100;
+  const reviewHistoryIndex = reviewResult
+    ? results.findIndex((item) => item === reviewResult || (item.level === reviewResult.level && item.title === reviewResult.title))
+    : -1;
+  const reviewCaseIndex = reviewResult
+    ? (practiceMode ? PRACTICE_LEVELS : LEVELS).findIndex((item) => item.level === reviewResult.level && item.title === reviewResult.title)
+    : -1;
+  const displayCaseIndex = reviewResult && reviewCaseIndex >= 0 ? reviewCaseIndex : currentCaseIndex;
+  const displayLevelTitle = reviewResult?.title ?? level.title;
+  const displayStageLabel = reviewResult
+    ? `LEVEL ${reviewResult.level}`
+    : practiceMode
+      ? `실전 ${practiceIndex + 1}/${PRACTICE_LEVELS.length}`
+      : `LEVEL ${level.level}`;
+  const phaseProgressWidth = reviewResult
+    ? ((displayCaseIndex + 1) / totalCaseCount) * 100
+    : ((currentCaseIndex + phaseStep / 4) / totalCaseCount) * 100;
   const scoredClueCount = foundClueCount;
   const maxLevelScore = levelMaxScoreFor(level);
   const currentLevelScore = levelScoreFor(level, scoredClueCount, levelMistakes);
@@ -760,7 +775,12 @@ function App() {
     setFeedback("");
 
     if (reviewResult) {
-      setReviewResult(null);
+      if (reviewHistoryIndex > 0) {
+        setReviewResult(results[reviewHistoryIndex - 1]);
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      }
       return;
     }
 
@@ -844,6 +864,14 @@ function App() {
     setFeedback("");
 
     if (reviewResult) {
+      if (reviewHistoryIndex >= 0 && reviewHistoryIndex < results.length - 1) {
+        setReviewResult(results[reviewHistoryIndex + 1]);
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+        return;
+      }
+
       setReviewResult(null);
       return;
     }
@@ -912,7 +940,7 @@ function App() {
 
     openAssist({
       title: attempts >= 2 ? "최종미션 정답을 확인할 수 있어요" : "최종미션 힌트",
-      body: missionHint(calculation, level),
+      body: missionHint(calculation),
       answer: attempts >= 2 ? missionAnswerText(calculation) : undefined,
       onFill:
         attempts >= 2
@@ -1103,17 +1131,27 @@ function App() {
 
         {screen === "game" && (
           <GameScreen
-            currentIndex={currentCaseIndex}
-            levelTitle={level.title}
-            nextTitle={phase === "scenario" && !allCluesFound ? "단서 정답 확인 후 다음 단계" : "다음 단계"}
+            currentIndex={displayCaseIndex}
+            levelTitle={displayLevelTitle}
+            nextTitle={
+              reviewResult
+                ? reviewHistoryIndex >= 0 && reviewHistoryIndex < results.length - 1
+                  ? "다음 결과"
+                  : "현재 문제로 돌아가기"
+                : phase === "scenario" && !allCluesFound
+                  ? "단서 정답 확인 후 다음 단계"
+                  : "다음 단계"
+            }
             onHome={() => setHomeChoiceOpen(true)}
             onNext={goNextPage}
             onPrevious={goPreviousPage}
             previousDisabled={
-              phase === "scenario" &&
-              ((practiceMode && practiceIndex === 0) || (!practiceMode && results.length === 0 && !reviewResult))
+              reviewResult
+                ? reviewHistoryIndex <= 0
+                : phase === "scenario" &&
+                  ((practiceMode && practiceIndex === 0) || (!practiceMode && results.length === 0))
             }
-            previousTitle={phase === "scenario" && practiceMode ? "이전 실전문제" : phase === "scenario" ? "이전 결과" : "이전 단계"}
+            previousTitle={reviewResult ? "이전 결과" : phase === "scenario" && practiceMode ? "이전 실전문제" : phase === "scenario" ? "이전 결과" : "이전 단계"}
             progressWidth={phaseProgressWidth}
             scoreSlot={
               practiceMode ? (
@@ -1127,7 +1165,7 @@ function App() {
                 </div>
               )
             }
-            stageLabel={practiceMode ? `실전 ${practiceIndex + 1}/${PRACTICE_LEVELS.length}` : `LEVEL ${level.level}`}
+            stageLabel={displayStageLabel}
             totalCount={totalCaseCount}
           >
 

@@ -1090,71 +1090,17 @@ export function supportHint(level: LevelData) {
   ].join("\n");
 }
 
-export function missionHint(calculation: CalculationResult, level: LevelData) {
-  const overdueDays = numericAnswer(level, "overdueDays");
-  const supportMeta = supportOptionMeta(calculation.supportType);
-  const isPracticeCase = Boolean(level.narrative);
-  const dependentRuleNote = dependentRuleNoteFor(level);
-  const usesSecuredDeduction = hasSecuredIncomeDeduction({
-    income: calculation.income,
-    repaymentBaseIncome: calculation.repaymentBaseIncome,
-    securedPayment: calculation.securedPayment,
-  });
-  const incomeLabel = usesSecuredDeduction ? "남은소득" : "소득";
-  const baseAdditionalLivingExpense =
-    calculation.baseAdditionalLivingExpense ??
-    round1(Math.max(0, calculation.additionalLivingExpense - (calculation.specialLivingExpense ?? 0)));
-  const specialLivingExpense = calculation.specialLivingExpense ?? 0;
-  const livingLines = [
-    ...(level.level >= 5
-      ? [
-          `MAX 생활비: 최저생계비(${calculation.householdMembers}인 가구) x 150% = ${formatAmount(calculation.maxLivingExpense)}`,
-          ...(baseAdditionalLivingExpense > 0
-            ? [`추가인정 생활비: ${formatAmount(baseAdditionalLivingExpense)}`]
-            : []),
-        ]
-      : []),
-    ...(specialLivingExpense > 0
-      ? [
-          `기타 특별 생활비: ${formatAmount(specialLivingExpense)}`,
-          `반영 생활비: ${recognizedLivingExpenseFormulaTextFor(calculation, calculation.recognizedMaxLivingExpense)}`,
-        ]
-      : level.level >= 5 && calculation.additionalLivingExpense > 0
-        ? [`반영 생활비: ${recognizedLivingExpenseFormulaTextFor(calculation, calculation.recognizedMaxLivingExpense)}`]
-        : []),
-  ];
+export function missionHint(calculation: CalculationResult) {
+  const maxPeriodMonthlyPayment = maxPeriodMonthlyPaymentFor(calculation);
+  const maxPeriodStatus = calculation.cappedByMaxPeriod
+    ? "소득이 높지 않아 상환기간 최장이 가능합니다."
+    : "소득이 높아 상환기간 최장이 불가합니다.";
 
   return [
-    "1. 지원구분: 연체일수 기준",
-    `${formatNumber(overdueDays)}일 → ${calculation.supportType}`,
-    ...(isPracticeCase
-      ? [
-          "",
-          "2. 부양가족",
-          dependentRuleNote || `인정 부양가족 ${dependentAnswerLabel(calculation.householdMembers)} 기준으로 검증합니다.`,
-        ]
-      : []),
-    "",
-    `${isPracticeCase ? "3" : "2"}. 월납부액: 10천원 단위로 반올림하여 산출`,
-    usesSecuredDeduction
-      ? `남은소득: 총 소득 ${formatAmount(calculation.income)} - 담보 원리금 ${formatAmount(calculation.securedPayment)} = ${formatAmount(calculation.repaymentBaseIncome)}`
-      : `소득: ${formatAmount(calculation.income)}`,
-    ...livingLines,
-    `${incomeLabel} ${formatAmount(calculation.repaymentBaseIncome)} - 생활비 ${formatAmount(calculation.adjustedLivingExpense)} = 월납부액 ${formatAmount(calculation.monthlyPayment)}`,
-    "",
-    `${isPracticeCase ? "4" : "3"}. 최대 상환기간 월납부액`,
-    `${calculation.supportType}: ${supportMeta.detail}`,
-    repaymentPeriodFormulaText(calculation),
-    ...(level.narrative
-      ? [
-          "",
-          "실전 정리",
-          dependentRuleNote || "인정 부양가족만 가구수에 반영합니다.",
-          "대상채무는 신용채무 합계입니다.",
-          "담보 원리금이나 이자는 남은소득 계산에서 먼저 차감합니다.",
-          "원리금상환 방식은 이자율을 반영해 상환기간을 계산합니다.",
-        ]
-      : []),
+    `1. 부양가족: ${dependentAnswerLabel(calculation.householdMembers)}`,
+    `2. ${maxPeriodStatus}`,
+    `3. 최대상환 기간: ${calculation.maxRepaymentMonths}개월`,
+    `4. 최대상환 기간 월납부금액: ${formatAmount(maxPeriodMonthlyPayment)}`,
   ].join("\n");
 }
 

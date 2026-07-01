@@ -1,5 +1,6 @@
 import { ClipboardList, Home, Play } from "lucide-react";
 import { PRACTICE_LEVELS } from "../../../data/levels";
+import startHero from "../../../../assets/start-hero.jpg";
 
 type PracticeResultScreenProps = {
   onGoLevelSelect: () => void;
@@ -20,14 +21,11 @@ export function PracticeResultScreen({
       <h1>실전문제 접수 완료</h1>
       <p className="result-summary-copy">총 {PRACTICE_LEVELS.length}개 실전문제를 모두 접수했습니다.</p>
 
-      <div className="result-list practice-complete-list" aria-label="완료한 실전문제">
-        {PRACTICE_LEVELS.map((item, index) => (
-          <div key={item.id}>
-            <span>실전문제 {index + 1}</span>
-            <strong>접수 완료</strong>
-            <small>{item.title}</small>
-          </div>
-        ))}
+      <div className="practice-complete-hero" aria-label="최고의 신입">
+        <strong>최고의 신입</strong>
+        <div>
+          <img src={startHero} alt="최고의 신입 캐릭터" />
+        </div>
       </div>
 
       <div className="start-actions">

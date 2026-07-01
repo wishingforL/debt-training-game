@@ -3057,33 +3057,38 @@ h2 {
   letter-spacing: 0;
 }
 
-.practice-complete-card {
-  gap: 10px;
+.practice-complete-hero {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 340px);
+  margin: 0 auto;
+  overflow: hidden;
+  background: #f8d15a;
+  border: 2px solid #000;
 }
 
-.practice-complete-card .fox-tier-head strong {
-  font-size: 1.14rem;
+.practice-complete-hero > div {
+  width: 100%;
+  aspect-ratio: 430 / 290;
+  overflow: hidden;
+  border-top: 2px solid #000;
 }
 
-.practice-complete-card p {
-  padding: 0;
-  text-align: left;
+.practice-complete-hero img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 430 / 377;
+  object-fit: cover;
+  transform: translateY(-23%);
 }
 
-.practice-complete-list {
-  max-height: min(34dvh, 320px);
-}
-
-.practice-complete-list div {
-  min-height: 44px;
-}
-
-.practice-complete-list strong {
+.practice-complete-hero strong {
   color: var(--ink);
-}
-
-.practice-complete-list small {
-  grid-column: 1 / -1;
+  padding: 8px 10px 9px;
+  font-size: clamp(1.52rem, 5.2vw, 1.85rem);
+  font-weight: 1000;
+  line-height: 1.08;
+  text-align: center;
 }
 
 .sheet-backdrop {

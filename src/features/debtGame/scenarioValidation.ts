@@ -23,6 +23,22 @@ type ScenarioFieldTapValidationParams = {
   wrongAttempts: Record<string, number>;
 };
 
+function isDebtAmountField(field: IntakeField) {
+  return (
+    field.screen === "채무현황" &&
+    (field.key === "unsecuredDebt" ||
+      field.key === "securedDebt" ||
+      field.key.startsWith("unsecuredDebt.") ||
+      field.key.startsWith("securedDebt."))
+  );
+}
+
+function canGroupBySameClue(tappedField: IntakeField, candidate: IntakeField) {
+  if (tappedField.key === candidate.key) return true;
+  if (isDebtAmountField(tappedField) && isDebtAmountField(candidate)) return false;
+  return fieldClue(candidate) === fieldClue(tappedField);
+}
+
 export function validateScenarioFieldTap({
   activeField,
   activeFieldIndex,
@@ -60,7 +76,7 @@ export function validateScenarioFieldTap({
       (field) =>
         candidate.screen === field.screen &&
         !solved[candidate.key] &&
-        (fieldClue(candidate) === fieldClue(field) ||
+        (canGroupBySameClue(field, candidate) ||
           (!practiceMode && sameDebtClueGroup(field, candidate)) ||
           sameDependentClueGroup(field, candidate)),
     ),
